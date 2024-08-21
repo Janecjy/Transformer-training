@@ -1,0 +1,9 @@
+__pycache__/
+Models/
+NEWDatasets/
+old-Models/
+out/
+*.png
+*.ipynb
+Loss*
+.DS_Store
