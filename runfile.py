@@ -29,8 +29,6 @@ parser.add_argument('--NumDecoderLayers', '-NDL', help='Number of Decoder Layers
 parser.add_argument('--EmbSize', '-ES', help='Embedding Size', type=int, default=32)
 parser.add_argument('--NHead', '-NH', help='Number of Heads', type=int, default=4)
 parser.add_argument('--Weighted', '-W', help='Whether to use weighted loss', type=str2bool, default=True)
-parser.add_argument('--Univariate', '-U', help='Whether to use univariate data', type=str2bool, default=False)
-parser.add_argument('--ColumnIndex', '-CI', help='Index of column to use for univariate data', type=int, default=0)
 parser.add_argument('--LearningRate', '-LR', help='Learning Rate', type=float, default=1e-4)
 parser.add_argument('--AdamBeta1', '-AB1', help='Beta1 for Adam Optimizer', type=float, default=0.9)
 parser.add_argument('--AdamBeta2', '-AB2', help='Beta2 for Adam Optimizer', type=float, default=0.999)
@@ -44,14 +42,12 @@ num_decoder_layers = args.NumDecoderLayers
 emb_size = args.EmbSize
 nhead = args.NHead
 weighted = args.Weighted
-univariate = args.Univariate
-column_index = args.ColumnIndex
 learning_rate = args.LearningRate
 adam_beta1 = args.AdamBeta1
 adam_beta2 = args.AdamBeta2
 # selected_indices = [0, 1, 4, 6, 8, 12]
 selected_indices = args.SelectedIndices
-save_name = "BaseTransformer3_norm_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_beta1_"+str(adam_beta1)+"_beta2_"+str(adam_beta2)+"_univariate_"+str(args.Univariate)+"_column_"+str(args.ColumnIndex)+"_loss*20_selected_"+','.join(map(str, selected_indices))
+save_name = "BaseTransformer3_norm_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_beta1_"+str(adam_beta1)+"_beta2_"+str(adam_beta2)+"_loss*20_selected_"+','.join(map(str, selected_indices))
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
@@ -67,14 +63,6 @@ with open('./NEWDatasets/'+dataset_name+'-norm-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
     train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
-    if univariate:
-        train_dataset = train_dataset[:, :, column_index].unsqueeze(-1)
-
-        # Verify the shape
-        # print(train_dataset.shape)  # Should output: torch.Size([30116, 64, 1])
-        print(train_dataset.shape)
-        
-    
 
 model = Seq2SeqWithEmbeddingmod(num_encoder_layers=num_encoder_layers,
                              num_decoder_layers=num_decoder_layers,
