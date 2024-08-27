@@ -47,7 +47,7 @@ adam_beta1 = args.AdamBeta1
 adam_beta2 = args.AdamBeta2
 # selected_indices = [0, 1, 4, 6, 8, 12]
 selected_indices = args.SelectedIndices
-save_name = "BaseTransformer3_norm_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_beta1_"+str(adam_beta1)+"_beta2_"+str(adam_beta2)+"_lossall*20_original_selected_"+','.join(map(str, selected_indices))
+save_name = "BaseTransformer3_norm_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_beta1_"+str(adam_beta1)+"_beta2_"+str(adam_beta2)+"_lossall*20_selected_"+','.join(map(str, selected_indices))
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")

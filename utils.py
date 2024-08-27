@@ -175,11 +175,27 @@ class weighted_mse():
         self.weights = weights[:, np.newaxis]
         self.weights = np.repeat(self.weights, dim, axis=1)
         self.weights = torch.FloatTensor(self.weights).to(device)
+        self.scaling_factor = 20
+        self.scaled_dims = [0, 1, 2, 3, 4, 5]
 
     def loss(self,input, target):
-        mse = (input-target)**2
-        mse = torch.sum(mse, 0)
-        mse = mse*self.weights
+        # mse = (input-target)**2
+        # mse = torch.sum(mse, 0)
+        # mse = mse*self.weights
+        
+        # print("Original: ", torch.sum(mse))
+        
+        mse = (input - target) ** 2
+        
+        # Apply the scaling factor only to the selected dimensions before summing
+        for dim in self.scaled_dims:
+            mse[:, :, dim] *= self.scaling_factor
+        
+        mse = torch.sum(mse, 0)  # Sum across the batch dimension (dim 0)
+        mse = mse * self.weights  # Apply the weights
+
+        # print("Scaled: ", torch.sum(mse))
+        
         return torch.sum(mse)
     
 def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
@@ -217,7 +233,8 @@ def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, d
             # loss = loss_func.loss(model_out_scaled, expected_output_scaled)
             # print(loss)
             # loss = loss_func(model_out.reshape(-1, expected_shape), expected_output.reshape(-1, expected_shape))
-            loss = 20*loss_func.loss(model_out, expected_output)
+            # loss = 20*loss_func.loss(model_out, expected_output)
+            loss = loss_func.loss(model_out, expected_output)
             # print(loss2)
             # return
             loss.backward()
