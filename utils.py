@@ -200,8 +200,26 @@ def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, d
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             optimizer.zero_grad()
             expected_shape = model_out.shape[-2]*model_out.shape[-1]
-            #loss = loss_func(model_out.reshape(-1, expected_shape), expected_output.reshape(-1, expected_shape))
+            
+            # Apply the scaling factor only to the 6th column (index 5)
+            # scaling_factor = torch.sqrt(torch.tensor(20.0))
+            # # Separate the columns to be scaled and those not to be scaled
+            # model_out_scaled = model_out.clone()
+            # expected_output_scaled = expected_output.clone()
+            # # print(model_out)
+
+            # # Apply scaling factor to the 6th column (index 5)
+            # model_out_scaled[:, :, :] *= scaling_factor
+            # expected_output_scaled[:, :, :] *= scaling_factor
+            # # print(model_out_scaled)
+
+            # # Calculate loss using scaled outputs
+            # loss = loss_func.loss(model_out_scaled, expected_output_scaled)
+            # print(loss)
+            # loss = loss_func(model_out.reshape(-1, expected_shape), expected_output.reshape(-1, expected_shape))
             loss = 20*loss_func.loss(model_out, expected_output)
+            # print(loss2)
+            # return
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
