@@ -5,6 +5,7 @@ import torch.nn as nn
 from models import create_mask
 import time
 import pickle
+import copy
 
 #CONSTANTS
 PAD_IDX = 2
@@ -104,6 +105,7 @@ def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NU
         loss_traj += [epoch_loss]
         
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds")
+        print(f"Epoch loss = {epoch_loss:.6f}")
         if (epoch+1)%10 == 0:
             print(f"Epoch loss = {epoch_loss:.6f}")
         if epoch == num_epochs-1:
@@ -175,15 +177,34 @@ class weighted_mse():
         self.weights = weights[:, np.newaxis]
         self.weights = np.repeat(self.weights, dim, axis=1)
         self.weights = torch.FloatTensor(self.weights).to(device)
-        self.scaling_factor = 20
+
+    def loss(self,input, target):
+        mse = (input-target)**2
+        mse = torch.sum(mse, 0)
+        mse = mse*self.weights
+        return torch.sum(mse)
+
+class weighted_mse_original():
+    def __init__(self, weights, device, dim):
+        self.weights = weights[:, np.newaxis]
+        self.weights = np.repeat(self.weights, dim, axis=1)
+        self.weights = torch.FloatTensor(self.weights).to(device)
+
+    def loss(self,input, target):
+        mse = (input-target)**2
+        mse = torch.sum(mse, 0)
+        mse = mse*self.weights
+        return torch.sum(mse)
+
+class weighted_mse_scale_mse():
+    def __init__(self, weights, device, dim):
+        self.weights = weights[:, np.newaxis]
+        self.weights = np.repeat(self.weights, dim, axis=1)
+        self.weights = torch.FloatTensor(self.weights).to(device)
+        self.scaling_factor = 2
         self.scaled_dims = [0, 1, 2, 3, 4, 5]
 
     def loss(self,input, target):
-        # mse = (input-target)**2
-        # mse = torch.sum(mse, 0)
-        # mse = mse*self.weights
-        
-        # print("Original: ", torch.sum(mse))
         
         mse = (input - target) ** 2
         
@@ -193,19 +214,36 @@ class weighted_mse():
         
         mse = torch.sum(mse, 0)  # Sum across the batch dimension (dim 0)
         mse = mse * self.weights  # Apply the weights
-
-        # print("Scaled: ", torch.sum(mse))
         
         return torch.sum(mse)
     
 def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
-    loss_func = weighted_mse(weights, device, dataset.shape[2])
-    loss_traj = []
-    model.train()
+    # model 1: 2*loss, model 2: 2x scale mse, model 3: 2x output and target
+    # torch.manual_seed(200)
+    torch.save(model, './Models/tmp.p')
+    
+    loss_func1 = weighted_mse_original(torch.FloatTensor(weights).detach().clone(), device, dataset.shape[2])
+    loss_traj1 = []
+    model1 = torch.load('./Models/tmp.p')
+    model1.train()
+    optimizer1 = optimizer[0]
+    
+    # loss_func2 = weighted_mse_scale_mse(torch.FloatTensor(weights).detach().clone(), device, dataset.shape[2])
+    # loss_traj2 = []
+    # model2 = torch.load('./Models/tmp.p')
+    # model2.train()
+    # optimizer2 = optimizer[1]
+    
+    # loss_func3 = weighted_mse_original(copy.deepcopy(weights), device, dataset.shape[2])
+    # loss_traj3 = []
+    # model3 = copy.deepcopy(model)
+    # model3.train()
+    # optimizer3 = copy.deepcopy(optimizer)
+    
     num_batch = dataset.shape[0]//batch_size
     for epoch in range(num_epochs):
         
-        epoch_loss = 0.0
+        epoch_loss1, epoch_loss2, epoch_loss3 = 0.0, 0.0, 0.0
         t0 = time.time()
         for batch in range(num_batch):
             input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
@@ -213,51 +251,81 @@ def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, d
             dec_input = (1.5*torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             expected_output = input[:, -prediction_len:, :].to(device)
-            model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-            optimizer.zero_grad()
-            expected_shape = model_out.shape[-2]*model_out.shape[-1]
             
-            # Apply the scaling factor only to the 6th column (index 5)
-            # scaling_factor = torch.sqrt(torch.tensor(20.0))
-            # # Separate the columns to be scaled and those not to be scaled
-            # model_out_scaled = model_out.clone()
+            # model 1 training            
+            model_out1 = model1(enc_input.detach().clone(), dec_input.detach().clone(), src_mask.detach().clone(), tgt_mask.detach().clone(), None, None, None)
+            optimizer1.zero_grad()
+            loss1 = 2*loss_func1.loss(model_out1, expected_output)
+            loss1.backward()
+            optimizer1.step()
+            epoch_loss1 += loss1.item()
+            
+            # # model 2 training
+            # model_out2 = model2(enc_input.detach().clone(), dec_input.detach().clone(), src_mask.detach().clone(), tgt_mask.detach().clone(), None, None, None)
+            # optimizer2.zero_grad()
+            # loss2 = loss_func2.loss(model_out2, expected_output)
+            # loss2.backward()
+            # optimizer2.step()
+            # epoch_loss2 += loss2.item()
+            
+            # # model 3 training
+            # model_out3 = model3(copy.deepcopy(enc_input), copy.deepcopy(dec_input), copy.deepcopy(src_mask), copy.deepcopy(tgt_mask), None, None, None)
+            # optimizer3.zero_grad()
+            # scaling_factor = torch.sqrt(torch.tensor(2.0))
+            # model_out_scaled = model_out3.clone()
             # expected_output_scaled = expected_output.clone()
-            # # print(model_out)
-
-            # # Apply scaling factor to the 6th column (index 5)
             # model_out_scaled[:, :, :] *= scaling_factor
             # expected_output_scaled[:, :, :] *= scaling_factor
-            # # print(model_out_scaled)
+            # loss3 = loss_func3.loss(model_out_scaled, expected_output_scaled)
+            # loss3.backward()
+            # optimizer3.step()
+            # epoch_loss3 += loss3.item()
 
-            # # Calculate loss using scaled outputs
-            # loss = loss_func.loss(model_out_scaled, expected_output_scaled)
-            # print(loss)
-            # loss = loss_func(model_out.reshape(-1, expected_shape), expected_output.reshape(-1, expected_shape))
-            # loss = 20*loss_func.loss(model_out, expected_output)
-            loss = loss_func.loss(model_out, expected_output)
-            # print(loss2)
-            # return
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
+            print(f"Batch {batch+1}/{num_batch}: Loss1 = {loss1.item():.6f}", flush=True)#, Loss2 = {loss2.item():.6f}, Loss3 = {loss3.item():.6f}", flush=True)
+
         epoch_time = time.time() - t0
-        epoch_loss /= num_batch
-        loss_traj += [epoch_loss]
+        epoch_loss1 /= num_batch
+        loss_traj1 += [epoch_loss1]
+        # epoch_loss2 /= num_batch
+        # loss_traj2 += [epoch_loss2]
+        # epoch_loss3 /= num_batch
+        # loss_traj3 += [epoch_loss3]
         
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds")
-        if (epoch+1)%10 == 0:
-            print(f"Epoch loss = {epoch_loss:.6f}")
+        print(f"Epoch loss 1 = {epoch_loss1:.6f}", flush=True)
+        # print(f"Epoch loss 2 = {epoch_loss2:.6f}", flush=True)
+        # print(f"Epoch loss 3 = {epoch_loss3:.6f}", flush=True)
+        # if (epoch+1)%10 == 0:
+        #     print(f"Epoch loss 1 = {epoch_loss1:.6f}, Epoch loss 2 = {epoch_loss2:.6f}, Epoch loss 3 = {epoch_loss3:.6f}")
         if epoch == num_epochs-1:
-            print(f"Final Epoch: Loss = {epoch_loss:.6f}")
+            print(f"Final Epoch: Model 1 Loss = {epoch_loss1:.6f}, Model 2 Loss = {epoch_loss2:.6f}, Model 3 Loss = {epoch_loss3:.6f}")
             if checkpoint_suffix is not None:
-                with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
-                    pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-                torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
+                with open('./Loss1_log_'+checkpoint_suffix+'.p', 'wb') as f:
+                    pickle.dump(loss_traj1, f, protocol=pickle.HIGHEST_PROTOCOL)
+                with open('./Loss2_log_'+checkpoint_suffix+'.p', 'wb') as f:
+                    pickle.dump(loss_traj2, f, protocol=pickle.HIGHEST_PROTOCOL)
+                with open('./Loss3_log_'+checkpoint_suffix+'.p', 'wb') as f:
+                    pickle.dump(loss_traj3, f, protocol=pickle.HIGHEST_PROTOCOL)
+                torch.save(model1, './Models/'+checkpoint_suffix+'-1000iter-1.p')
+                torch.save(model2, './Models/'+checkpoint_suffix+'-1000iter-2.p')
+                torch.save(model3, './Models/'+checkpoint_suffix+'-1000iter-3.p')
 
+        if epoch == 49 and checkpoint_suffix is not None:
+            torch.save(model1, './Models/Checkpoint-'+checkpoint_suffix+'-50iter-1.p')
+            torch.save(model2, './Models/Checkpoint-'+checkpoint_suffix+'-50iter-2.p')
+            torch.save(model3, './Models/Checkpoint-'+checkpoint_suffix+'-50iter-3.p')
+        if epoch == 99 and checkpoint_suffix is not None:
+            torch.save(model1, './Models/Checkpoint-'+checkpoint_suffix+'-100iter-1.p')
+            torch.save(model2, './Models/Checkpoint-'+checkpoint_suffix+'-100iter-2.p')
+            torch.save(model3, './Models/Checkpoint-'+checkpoint_suffix+'-100iter-3.p')
         if epoch == 249 and checkpoint_suffix is not None:
-            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')
+            torch.save(model1, './Models/Checkpoint-'+checkpoint_suffix+'-250iter-1.p')
+            torch.save(model2, './Models/Checkpoint-'+checkpoint_suffix+'-250iter-2.p')
+            torch.save(model3, './Models/Checkpoint-'+checkpoint_suffix+'-250iter-3.p')
         if epoch == 499 and checkpoint_suffix is not None:
-            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-500iter.p')
+            torch.save(model1, './Models/Checkpoint-'+checkpoint_suffix+'-500iter-1.p')
+            torch.save(model2, './Models/Checkpoint-'+checkpoint_suffix+'-500iter-2.p')
+            torch.save(model3, './Models/Checkpoint-'+checkpoint_suffix+'-500iter-3.p')
 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]

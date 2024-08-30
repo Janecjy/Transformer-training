@@ -75,15 +75,17 @@ model = Seq2SeqWithEmbeddingmod(num_encoder_layers=num_encoder_layers,
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 opt = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(adam_beta1, adam_beta2))
+opt1 = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(adam_beta1, adam_beta2))
 train_dataset = train_dataset.to(DEVICE)
+# torch.manual_seed(50)
 
 # # trained_model, loss_traj = train_model(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=2000, device=DEVICE, checkpoint_suffix=save_name)
 if not weighted:
     train_model(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name)
 else:
     weights = np.ones(PREDICTION_LENGTH)
-    weights[0:9] = np.arange(1,10,1)[::-1]
-    weights[-9:] = np.arange(1,10,1)
+    # weights[0:9] = np.arange(1,10,1)[::-1]
+    # weights[-9:] = np.arange(1,10,1)
     print(weights)
-    weights = 1/sum(weights)*weights
-    train_model_reweighted(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name)
+    # weights = 1/sum(weights)*weights
+    train_model_reweighted(model, train_dataset, [opt, opt1], weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name)
