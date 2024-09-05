@@ -14,6 +14,8 @@ NUM_EPOCHS = 250
 CONTEXT_LENGTH = 32
 PREDICTION_LENGTH = 32
 
+torch.manual_seed(0)
+
 def form_dataset_mod(filelist, context_len, prediction_len, input_dim=13):
     seq_len = context_len + prediction_len
     train_dataset = torch.zeros((1, input_dim, 500))
@@ -197,27 +199,26 @@ class weighted_mse_original():
         return torch.sum(mse)
 
 class weighted_mse_scale_mse():
-    def __init__(self, weights, device, dim):
+    def __init__(self, weights, device, dim, lw):
         self.weights = weights[:, np.newaxis]
         self.weights = np.repeat(self.weights, dim, axis=1)
         self.weights = torch.FloatTensor(self.weights).to(device)
-        self.scaling_factor = 2
-        self.scaled_dims = [0, 1, 2, 3, 4, 5]
+        self.loss_weights = lw
 
     def loss(self,input, target):
         
         mse = (input - target) ** 2
         
         # Apply the scaling factor only to the selected dimensions before summing
-        for dim in self.scaled_dims:
-            mse[:, :, dim] *= self.scaling_factor
+        for i, scale in enumerate(self.loss_weights):
+            mse[:, :, i] *= scale
         
         mse = torch.sum(mse, 0)  # Sum across the batch dimension (dim 0)
         mse = mse * self.weights  # Apply the weights
         
         return torch.sum(mse)
     
-def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
+def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):  
     # model 1: 2*loss, model 2: 2x scale mse, model 3: 2x output and target
     # torch.manual_seed(200)
     torch.save(model, './Models/tmp.p')
@@ -253,9 +254,10 @@ def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, d
             expected_output = input[:, -prediction_len:, :].to(device)
             
             # model 1 training            
-            model_out1 = model1(enc_input.detach().clone(), dec_input.detach().clone(), src_mask.detach().clone(), tgt_mask.detach().clone(), None, None, None)
+            # model_out1 = model1(enc_input.detach().clone(), dec_input.detach().clone(), src_mask.detach().clone(), tgt_mask.detach().clone(), None, None, None)
+            model_out1 = model1(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             optimizer1.zero_grad()
-            loss1 = 2*loss_func1.loss(model_out1, expected_output)
+            loss1 = 20*loss_func1.loss(model_out1, expected_output)
             loss1.backward()
             optimizer1.step()
             epoch_loss1 += loss1.item()
@@ -329,7 +331,103 @@ def train_model_reweighted(model, dataset, optimizer, weights, prediction_len, d
 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
+    
+def train_model_reweighted1(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
+    
+    # torch.save(model, './Models/tmp.p')
+    
+    loss_func = weighted_mse(weights, device, dataset.shape[2])
+    loss_traj = []
+    # model = torch.load('./Models/tmp.p', map_location=device)
+    model.train()
+    num_batch = dataset.shape[0]//batch_size
+    for epoch in range(num_epochs):
+        
+        epoch_loss = 0.0
+        t0 = time.time()
+        for batch in range(num_batch):
+            input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
+            enc_input = input[:, :-prediction_len, :].to(device)
+            dec_input = (1.5*torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+            expected_output = input[:, -prediction_len:, :].to(device)
+            model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+            optimizer.zero_grad()
+            expected_shape = model_out.shape[-2]*model_out.shape[-1]
+            
+            loss = 20.0*loss_func.loss(model_out, expected_output)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+            print(f"Batch {batch+1}/{num_batch}: Loss1 = {loss.item():.6f}", flush=True)
+        epoch_time = time.time() - t0
+        epoch_loss /= num_batch
+        loss_traj += [epoch_loss]
+        
+        print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds, Loss = {epoch_loss:.6f}")
+        if (epoch+1)%10 == 0:
+            print(f"Epoch loss = {epoch_loss:.6f}")
+        if epoch == num_epochs-1:
+            print(f"Final Epoch: Loss = {epoch_loss:.6f}")
+            if checkpoint_suffix is not None:
+                with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
+                    pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
+                torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
 
+        if epoch == 249 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')
+        if epoch == 499 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-500iter.p')
+
+        shuffle_idx = torch.randperm(dataset.shape[0])
+        dataset = dataset[shuffle_idx, :, :]
+        
+def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
+    
+    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw)
+    loss_traj = []
+    model.train()
+    num_batch = dataset.shape[0]//batch_size
+    for epoch in range(num_epochs):
+        
+        epoch_loss = 0.0
+        t0 = time.time()
+        for batch in range(num_batch):
+            input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
+            enc_input = input[:, :-prediction_len, :].to(device)
+            dec_input = (1.5*torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+            expected_output = input[:, -prediction_len:, :].to(device)
+            model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+            optimizer.zero_grad()
+            expected_shape = model_out.shape[-2]*model_out.shape[-1]
+            
+            loss = loss_func.loss(model_out, expected_output)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+            # print(f"Batch {batch+1}/{num_batch}: Loss2 = {loss.item():.6f}", flush=True)
+        epoch_time = time.time() - t0
+        epoch_loss /= num_batch
+        loss_traj += [epoch_loss]
+        
+        print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds, Loss = {epoch_loss:.6f}")
+        if (epoch+1)%10 == 0:
+            print(f"Epoch loss = {epoch_loss:.6f}")
+        if epoch == num_epochs-1:
+            print(f"Final Epoch: Loss = {epoch_loss:.6f}")
+            if checkpoint_suffix is not None:
+                with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
+                    pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
+                torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
+
+        if epoch == 249 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')
+        if epoch == 499 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-500iter.p')
+
+        shuffle_idx = torch.randperm(dataset.shape[0])
+        dataset = dataset[shuffle_idx, :, :]
 
 def test_model(model, dataset, prediction_len, device):
     model = model.eval()
