@@ -339,7 +339,7 @@ class MLP(nn.Module):
 INPUT_DIM = int(sys.argv[1])
 COLUMN_INDEX = int(sys.argv[2])
 selected_indices = [0, 1, 4, 6, 8, 12]
-with open('./NEWDatasets/FullDataset-larger_alt-norm-train.p', 'rb') as f:
+with open('./NEWDatasets/FullDataset-new-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
     train_dataset = train_dataset[:, :, selected_indices]
     if INPUT_DIM == 1:
