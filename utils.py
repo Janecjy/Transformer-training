@@ -419,7 +419,7 @@ def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, 
             if checkpoint_suffix is not None:
                 with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
                     pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-                torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
+                torch.save(model, './Models/'+checkpoint_suffix+'-500iter.p')
 
         if epoch == 249 and checkpoint_suffix is not None:
             torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')

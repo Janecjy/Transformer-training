@@ -57,7 +57,7 @@ DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
 print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024*2
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 500
 CONTEXT_LENGTH = 32
 PREDICTION_LENGTH = 32
 
