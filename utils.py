@@ -433,7 +433,9 @@ def test_model(model, dataset, prediction_len, device):
     model = model.eval()
     loss_func = nn.MSELoss(reduction='sum')
     num_samples = dataset.shape[0]
+    num_features = dataset.shape[2]
     test_loss = np.zeros((num_samples, prediction_len))
+    outputs = []
     print(f'Total test samples = {test_loss.shape[0]}')
     for i in range(num_samples):
         sample = (dataset[i,:,:].reshape(1, dataset.shape[1], dataset.shape[2])).clone()
@@ -442,9 +444,19 @@ def test_model(model, dataset, prediction_len, device):
         expected_output = sample[:, -prediction_len:, :].to(device)
         src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
         model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-        test_loss[i,:] = [loss_func(model_out[:,j,:], expected_output[:,j,:]).item() for j in range(prediction_len)]
-        if i%(num_samples//10) == 0: print(f'Done testing {i} of {num_samples}')
-    return test_loss
+        # Calculate loss for each feature and each time step in the current batch
+        for j in range(prediction_len):
+            for k in range(num_features):
+                test_loss[i, j, k] = loss_func(model_out[:, j, k], expected_output[:, j, k]).item()
+    
+    # Compute average test loss across all batches and prediction steps for each feature
+    average_test_loss_per_feature = np.mean(test_loss, axis=(0, 1))
+    # outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
+    
+    return average_test_loss_per_feature, outputs
+        #     test_loss[i,:] = [loss_func(model_out[:,j,:], expected_output[:,j,:]).item() for j in range(prediction_len)]
+    #     if i%(num_samples//10) == 0: print(f'Done testing {i} of {num_samples}')
+    # return test_loss
 
 
 
@@ -453,9 +465,10 @@ def test_model_batched(model, dataset, batch_size, prediction_len, device, mae):
     if not mae: loss_func = nn.MSELoss(reduction='mean')
     else: loss_func = nn.L1Loss(reduction='mean')
     num_samples = dataset.shape[0]
+    num_features = dataset.shape[2]
     print(f'Total test samples = {num_samples}')
     num_batches = num_samples//batch_size
-    test_loss = np.zeros((num_batches, prediction_len))
+    test_loss = np.zeros((num_batches, prediction_len, num_features))
     outputs = []
     for i in range(num_batches):
         print(f'Starting batch {i+1} of {num_batches}')
@@ -465,9 +478,21 @@ def test_model_batched(model, dataset, batch_size, prediction_len, device, mae):
         expected_output = sample[:, -prediction_len:, :].to(device)
         src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
         model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-        outputs.append(model_out.cpu().detach().numpy())
-        test_loss[i,:] = [loss_func(model_out[:,j,:], expected_output[:,j,:]).item() for j in range(prediction_len)]
-    test_loss = (1/batch_size)*test_loss
-    outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
-    return test_loss, outputs
+        # print("model_out shape: ", model_out.shape)
+        # Calculate loss for each feature and each time step in the current batch
+        for j in range(prediction_len):
+            for k in range(num_features):
+                test_loss[i, j, k] = loss_func(model_out[:, j, k], expected_output[:, j, k]).item()
+    # print("test_loss shape: ", test_loss.shape)
+    
+    # Compute average test loss across all batches and prediction steps for each feature
+    average_test_loss_per_feature = np.mean(test_loss, axis=0)
+    # print("average_test_loss_per_feature shape: ", average_test_loss_per_feature.shape)
+    # outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
+    
+    return average_test_loss_per_feature, outputs
+    #     test_loss[i,:] = [loss_func(model_out[:,j,:], expected_output[:,j,:]).item() for j in range(prediction_len)]
+    # test_loss = (1/batch_size)*test_loss
+    # outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
+    # return test_loss, outputs
 

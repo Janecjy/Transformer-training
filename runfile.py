@@ -49,7 +49,7 @@ adam_beta2 = args.AdamBeta2
 # selected_indices = [0, 1, 4, 6, 8, 12]
 selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
-save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_selected_"+','.join(map(str, selected_indices))+"_lossweight_"+','.join(map(str, loss_weight))
+save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_selected_"+','.join(map(str, selected_indices))+"_lossweight_"+','.join(map(str, loss_weight))+"_norw"
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
@@ -84,8 +84,8 @@ if not weighted:
     train_model(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name)
 else:
     weights = np.ones(PREDICTION_LENGTH)
-    weights[0:9] = np.arange(1,10,1)[::-1]
-    weights[-9:] = np.arange(1,10,1)
-    print(weights)
+    # weights[0:9] = np.arange(1,10,1)[::-1]
+    # weights[-9:] = np.arange(1,10,1)
+    # print(weights)
     weights = 1/sum(weights)*weights
     train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight)
