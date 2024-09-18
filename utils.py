@@ -199,14 +199,18 @@ class weighted_mse_original():
         return torch.sum(mse)
 
 class weighted_mse_scale_mse():
-    def __init__(self, weights, device, dim, lw):
+    def __init__(self, weights, device, dim, lw, normalizer, alpha):
         self.weights = weights[:, np.newaxis]
         self.weights = np.repeat(self.weights, dim, axis=1)
         self.weights = torch.FloatTensor(self.weights).to(device)
         self.loss_weights = lw
+        self.normalizer = normalizer
+        self.alpha = alpha
 
     def loss(self,input, target):
-        
+        # print("input: ", input.shape)
+        # print("target: ", target.shape)
+        # exit(0)
         mse = (input - target) ** 2
         
         # Apply the scaling factor only to the selected dimensions before summing
@@ -216,7 +220,62 @@ class weighted_mse_scale_mse():
         mse = torch.sum(mse, 0)  # Sum across the batch dimension (dim 0)
         mse = mse * self.weights  # Apply the weights
         
-        return torch.sum(mse)
+        correctness_term = self.check_characteristic_correctness(input, target)
+        print("correctness_term: ", correctness_term)
+        # exit(0)
+        total_loss = torch.sum(mse) + self.alpha * correctness_term
+        
+        return total_loss
+    
+    # Function to check if the entire sequence is stable (fluctuates within ±2)
+    def check_stable(self, tokens):
+        max_val = torch.max(tokens)
+        min_val = torch.min(tokens)
+        # print(tokens, max_val, min_val)
+        
+        # Check if the range of the values is within ±2
+        return (max_val - min_val) < 4
+    
+    # Function to check for continuous patterns in tokens
+    def check_continuous_pattern(self, tokens):
+        increases, decreases, stable = 0, 0, 0
+        
+        # Loop over the token positions
+        for i in range(len(tokens) - 2):
+            # Check for a continuous increase
+            if tokens[i] < tokens[i + 1] < tokens[i + 2]:
+                increases += 1
+            # Check for a continuous decrease
+            elif tokens[i] > tokens[i + 1] > tokens[i + 2]:
+                decreases += 1
+
+        return increases, decreases
+    
+    def check_characteristic_correctness(self, input, target):
+        correctness = 0
+        total_checks = 0
+        
+        # Iterate over both feature dimensions
+        for feature in range(input.shape[2]):
+            for i in range(input.shape[0]):  # Iterate through samples
+                input_seq = input[i, :, feature].detach()  # Get feature sequence for each sample
+                target_seq = target[i, :, feature].detach()  # Get corresponding target sequence
+                
+                
+                # Check for continuous patterns
+                input_continuous = self.check_continuous_pattern(input_seq)
+                input_stable = self.check_stable(input_seq)
+
+                target_continuous = self.check_continuous_pattern(target_seq)
+                target_stable = self.check_stable(target_seq)
+
+                # Correctness: True if both input and target exhibit the same pattern
+                if (input_continuous == target_continuous) and (input_stable == target_stable):
+                    correctness += 1  # Reward for matching patterns
+                
+                total_checks += 1  # Increment the number of checks
+
+        return correctness / total_checks  # Return normalized correctness
     
 def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):  
     # model 1: 2*loss, model 2: 2x scale mse, model 3: 2x output and target
@@ -382,9 +441,9 @@ def train_model_reweighted1(model, dataset, optimizer, weights, prediction_len, 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
         
-def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
+def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0):
     
-    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw)
+    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw, normalizer, alpha)
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0]//batch_size
