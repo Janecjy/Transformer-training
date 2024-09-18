@@ -199,15 +199,16 @@ class weighted_mse_original():
         return torch.sum(mse)
 
 class weighted_mse_scale_mse():
-    def __init__(self, weights, device, dim, lw, normalizer, alpha):
+    def __init__(self, weights, device, dim, lw, normalizer, alpha, selected_indices):
         self.weights = weights[:, np.newaxis]
         self.weights = np.repeat(self.weights, dim, axis=1)
         self.weights = torch.FloatTensor(self.weights).to(device)
         self.loss_weights = lw
         self.normalizer = normalizer
         self.alpha = alpha
+        self.selected_indices = selected_indices  # List of feature indices for which different checks are applied
 
-    def loss(self,input, target):
+    def loss(self, input, target):
         # print("input: ", input.shape)
         # print("target: ", target.shape)
         # exit(0)
@@ -221,6 +222,7 @@ class weighted_mse_scale_mse():
         mse = mse * self.weights  # Apply the weights
         
         correctness_term = self.check_characteristic_correctness(input, target)
+        print("mse: ", torch.sum(mse))
         print("correctness_term: ", correctness_term)
         # exit(0)
         total_loss = torch.sum(mse) + self.alpha * correctness_term
@@ -231,14 +233,13 @@ class weighted_mse_scale_mse():
     def check_stable(self, tokens):
         max_val = torch.max(tokens)
         min_val = torch.min(tokens)
-        # print(tokens, max_val, min_val)
         
         # Check if the range of the values is within ±2
         return (max_val - min_val) < 4
     
     # Function to check for continuous patterns in tokens
     def check_continuous_pattern(self, tokens):
-        increases, decreases, stable = 0, 0, 0
+        increases, decreases = 0, 0
         
         # Loop over the token positions
         for i in range(len(tokens) - 2):
@@ -250,32 +251,71 @@ class weighted_mse_scale_mse():
                 decreases += 1
 
         return increases, decreases
-    
+
+    # Function to check if the values fall into specific buckets (binary indicator)
+    def check_buckets(self, tokens, buckets):
+        bucket_indicators = {bucket: 0 for bucket in buckets}
+        for value in tokens:
+            for bucket in buckets:
+                if bucket[0] <= value < bucket[1]:
+                    bucket_indicators[bucket] = 1
+                    break
+        return bucket_indicators
+
     def check_characteristic_correctness(self, input, target):
         correctness = 0
         total_checks = 0
         
+        # Define bucket ranges for different features
+        feature_buckets = {
+            4: [(20, 40), (40, 60), (60, 80), (80, np.inf)],  # Buckets for feature index 5
+            8: [(0, 5), (5, 10), (10, 20), (20, 30), (30, np.inf)]  # Buckets for feature index 9
+        }
+        
         # Iterate over both feature dimensions
         for feature in range(input.shape[2]):
             for i in range(input.shape[0]):  # Iterate through samples
-                input_seq = input[i, :, feature].detach()  # Get feature sequence for each sample
-                target_seq = target[i, :, feature].detach()  # Get corresponding target sequence
+                input_seq = input[i, :, feature].detach() * self.normalizer[feature]  # Get feature sequence for each sample
+                target_seq = target[i, :, feature].detach() * self.normalizer[feature]  # Get corresponding target sequence
                 
-                
-                # Check for continuous patterns
-                input_continuous = self.check_continuous_pattern(input_seq)
-                input_stable = self.check_stable(input_seq)
+                if self.selected_indices[feature] in feature_buckets:
+                    buckets = feature_buckets[self.selected_indices[feature]]
+                    input_buckets = self.check_buckets(input_seq.cpu().numpy(), buckets)
+                    target_buckets = self.check_buckets(target_seq.cpu().numpy(), buckets)
+                    print("input_buckets: ", input_buckets)
+                    print("target_buckets: ", target_buckets)
+                    
+                    # Check if both input and target have the same bucket distribution
+                    if input_buckets == target_buckets:
+                        # print("Correct bucket distribution")
+                        if self.selected_indices[feature] == 8:
+                            # Also check continuous and stable characteristics
+                            input_continuous = self.check_continuous_pattern(input_seq)
+                            input_stable = self.check_stable(input_seq)
 
-                target_continuous = self.check_continuous_pattern(target_seq)
-                target_stable = self.check_stable(target_seq)
+                            target_continuous = self.check_continuous_pattern(target_seq)
+                            target_stable = self.check_stable(target_seq)
+                            print("input_continuous: ", input_continuous)
+                            print("input_stable: ", input_stable)
+                            print("target_continuous: ", target_continuous)
+                            print("target_stable: ", target_stable)
 
-                # Correctness: True if both input and target exhibit the same pattern
-                if (input_continuous == target_continuous) and (input_stable == target_stable):
-                    correctness += 1  # Reward for matching patterns
-                
+                            # Correctness: True if both input and target exhibit the same patterns
+                            if (input_continuous == target_continuous) and (input_stable == target_stable):
+                                # print("Correct continuous pattern and stability")
+                                correctness += 1  # Reward for matching patterns
+                            if (input_continuous != target_continuous):
+                                print("Incorrect continuous pattern")
+                            if (input_stable != target_stable):
+                                print("Incorrect stability")
+                        else:
+                            correctness += 1  # Reward for matching bucket distributions
+                    else:
+                        print("Incorrect bucket distribution")
+                    
                 total_checks += 1  # Increment the number of checks
 
-        return correctness / total_checks  # Return normalized correctness
+        return correctness / total_checks * 100  # Return normalized correctness
     
 def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):  
     # model 1: 2*loss, model 2: 2x scale mse, model 3: 2x output and target
@@ -441,9 +481,9 @@ def train_model_reweighted1(model, dataset, optimizer, weights, prediction_len, 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
         
-def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0):
+def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0, selected_indices=None):
     
-    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw, normalizer, alpha)
+    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw, normalizer, alpha, selected_indices)
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0]//batch_size

@@ -94,4 +94,4 @@ else:
     # weights[-9:] = np.arange(1,10,1)
     # print(weights)
     weights = 1/sum(weights)*weights
-    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight, normalizer=N, alpha=alpha)
+    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight, normalizer=N, alpha=alpha, selected_indices=selected_indices)
