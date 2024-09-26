@@ -225,7 +225,7 @@ class weighted_mse_scale_mse():
         print("mse: ", torch.sum(mse))
         print("correctness_term: ", correctness_term)
         # exit(0)
-        total_loss = torch.sum(mse) + self.alpha * correctness_term
+        total_loss = torch.sum(mse) + self.alpha * (100-correctness_term) 
         
         return total_loss
     
