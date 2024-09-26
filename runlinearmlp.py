@@ -10,8 +10,8 @@ import time
 from utils import test_model_batched, test_model, weighted_mse
 
 #CONSTANTS
-# DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-DEVICE = "cpu"
+DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+# DEVICE = "cpu"
 print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024
@@ -53,8 +53,138 @@ def train_linear_model(model, dataset, optimizer, prediction_len, device, num_ep
     return model, loss_traj
 
 
+class weighted_mse_scale_mse():
+    def __init__(self, weights, device, dim, lw, normalizer, alpha, selected_indices):
+        self.weights = weights[:, np.newaxis]
+        self.weights = np.repeat(self.weights, dim, axis=1)
+        self.weights = torch.FloatTensor(self.weights).to(device)
+        self.loss_weights = lw
+        self.normalizer = normalizer
+        self.alpha = alpha
+        self.selected_indices = selected_indices  # List of feature indices for which different checks are applied
+
+    def loss(self, input, target):
+        # print("input: ", input.shape)
+        # print("target: ", target.shape)
+        # exit(0)
+        mse = (input - target) ** 2
+        
+        # Apply the scaling factor only to the selected dimensions before summing
+        for i, scale in enumerate(self.loss_weights):
+            mse[:, :, i] *= scale
+        
+        mse = torch.sum(mse, 0)  # Sum across the batch dimension (dim 0)
+        mse = mse * self.weights  # Apply the weights
+        
+        correctness_term = self.check_characteristic_correctness(input, target)
+        # print("mse: ", torch.sum(mse))
+        # print("correctness_term: ", correctness_term)
+        # exit(0)
+        total_loss = torch.sum(mse) + self.alpha * correctness_term
+        
+        return total_loss
+    
+    # Function to check if the entire sequence is stable (fluctuates within ±2)
+    def check_stable(self, tokens):
+        max_val = torch.max(tokens)
+        min_val = torch.min(tokens)
+        
+        # Check if the range of the values is within ±2
+        return (max_val - min_val) < 4
+    
+    # Function to check for continuous patterns in tokens
+    def check_continuous_pattern(self, tokens):
+        increases, decreases = 0, 0
+        
+        # Loop over the token positions
+        for i in range(len(tokens) - 2):
+            # Check for a continuous increase
+            if tokens[i] < tokens[i + 1] < tokens[i + 2]:
+                increases += 1
+            # Check for a continuous decrease
+            elif tokens[i] > tokens[i + 1] > tokens[i + 2]:
+                decreases += 1
+
+        return increases, decreases
+
+    # Function to check if the values fall into specific buckets (binary indicator)
+    def check_buckets(self, tokens, buckets):
+        bucket_indicators = {bucket: 0 for bucket in buckets}
+        for value in tokens:
+            for bucket in buckets:
+                if bucket[0] <= value < bucket[1]:
+                    bucket_indicators[bucket] = 1
+                    break
+        return bucket_indicators
+
+    def check_characteristic_correctness(self, input, target):
+        correctness = 0
+        total_checks = 0
+        
+        # Define bucket ranges for different features
+        feature_buckets = {
+            4: [(20, 40), (40, 60), (60, 80), (80, np.inf)],  # Buckets for feature index 5
+            8: [(0, 5), (5, 10), (10, 20), (20, 30), (30, np.inf)]  # Buckets for feature index 9
+        }
+        
+        # Iterate over both feature dimensions
+        for feature in range(input.shape[2]):
+            for i in range(input.shape[0]):  # Iterate through samples
+                input_seq = input[i, :, feature].detach() * self.normalizer[feature]  # Get feature sequence for each sample
+                target_seq = target[i, :, feature].detach() * self.normalizer[feature]  # Get corresponding target sequence
+                
+                if self.selected_indices[feature] in feature_buckets:
+                    buckets = feature_buckets[self.selected_indices[feature]]
+                    input_buckets = self.check_buckets(input_seq.cpu().numpy(), buckets)
+                    target_buckets = self.check_buckets(target_seq.cpu().numpy(), buckets)
+                    # print("input_buckets: ", input_buckets)
+                    # print("target_buckets: ", target_buckets)
+                    
+                    # Check if both input and target have the same bucket distribution
+                    if input_buckets == target_buckets:
+                        # print("Correct bucket distribution")
+                        if self.selected_indices[feature] == 8:
+                            # Also check continuous and stable characteristics
+                            input_continuous = self.check_continuous_pattern(input_seq)
+                            input_stable = self.check_stable(input_seq)
+
+                            target_continuous = self.check_continuous_pattern(target_seq)
+                            target_stable = self.check_stable(target_seq)
+                            # print("input_continuous: ", input_continuous)
+                            # print("input_stable: ", input_stable)
+                            # print("target_continuous: ", target_continuous)
+                            # print("target_stable: ", target_stable)
+
+                            # Correctness: True if both input and target exhibit the same patterns
+                            if (input_continuous == target_continuous) and (input_stable == target_stable):
+                                # print("Correct continuous pattern and stability")
+                                correctness += 1  # Reward for matching patterns
+                            if (input_continuous != target_continuous):
+                                print("Incorrect continuous pattern")
+                            if (input_stable != target_stable):
+                                print("Incorrect stability")
+                        else:
+                            correctness += 1  # Reward for matching bucket distributions
+                    else:
+                        print("Incorrect bucket distribution")
+                    
+                total_checks += 1  # Increment the number of checks
+
+        return correctness / total_checks * 100  # Return percentage correctness
+
 def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
-    loss_func = torch.nn.MSELoss(reduction='sum')
+    # loss_func = torch.nn.MSELoss(reduction='sum')
+    weights = np.ones(PREDICTION_LENGTH)
+    weights[0:9] = np.arange(1,10,1)[::-1]
+    weights[-9:] = np.arange(1,10,1)
+    print(weights)
+    weights = 1/sum(weights)*weights
+
+    with open('NEWDatasets/FullDataset.p', 'rb') as f:
+        d = pickle.load(f)
+    N = d['normalizer'].detach().cpu().numpy()[selected_indices]
+    
+    loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], [20, 100], N, 20000, selected_indices)
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0]//batch_size
@@ -70,7 +200,7 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
             model_out = model(enc_input)
             optimizer.zero_grad()
             expected_shape = expected_output.shape[-2]*expected_output.shape[-1]
-            loss = loss_func(model_out, expected_output.reshape(expected_output.shape[0], expected_shape))
+            loss = loss_func.loss(model_out.reshape(expected_output.shape[0], expected_output.shape[1], expected_output.shape[2]), expected_output)
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
@@ -338,8 +468,9 @@ class MLP(nn.Module):
 
 INPUT_DIM = int(sys.argv[1])
 COLUMN_INDEX = int(sys.argv[2])
-selected_indices = [0, 1, 4, 6, 8, 12]
-with open('./NEWDatasets/FullDataset-new-train.p', 'rb') as f:
+# selected_indices = [0, 1, 4, 6, 8, 12]
+selected_indices = [4, 8]
+with open('./NEWDatasets/FullDataset-new-filtered1-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
     train_dataset = train_dataset[:, :, selected_indices]
     if INPUT_DIM == 1:
@@ -354,4 +485,5 @@ trained_model, loss_traj = train_mlp(model, train_dataset, opt, PREDICTION_LENGT
 if INPUT_DIM == 1:
     torch.save(trained_model, './Models/MLP-norm-408dim-noweighting-1000iter-'+str(COLUMN_INDEX)+'.p')
 else:
-    torch.save(trained_model, './Models/MLP-norm-408dim-noweighting-selected-0, 1, 4, 5, 8, 12-1000iter.p')
+    # torch.save(trained_model, './Models/MLP-norm-408dim-noweighting-selected-0, 1, 4, 5, 8, 12-1000iter.p')
+    torch.save(trained_model, './Models/MLP-norm-408dim-noweighting-selected-4, 8-1000iter-char.p')

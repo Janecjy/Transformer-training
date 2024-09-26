@@ -19,7 +19,7 @@ torch.manual_seed(0)
 def form_dataset_mod(filelist, context_len, prediction_len, input_dim=13):
     seq_len = context_len + prediction_len
     train_dataset = torch.zeros((1, input_dim, 500))
-    print('Started Forming Raw Dataset')
+    # print('Started Forming Raw Dataset')
     files_per_thread = len(filelist)//10
     global_max = -10*np.ones(input_dim)
     for thread in range(10):
@@ -56,7 +56,7 @@ def form_dataset_mod(filelist, context_len, prediction_len, input_dim=13):
 def form_dataset(filelist, context_len, prediction_len, input_dim=13):
     seq_len = context_len + prediction_len
     train_dataset = torch.zeros((1, input_dim, 500))
-    print('Started Forming Raw Dataset')
+    # print('Started Forming Raw Dataset')
     files_per_thread = len(filelist)//10
     for thread in range(10):
         print(f'Chunk {thread+1} of 10')
@@ -222,10 +222,10 @@ class weighted_mse_scale_mse():
         mse = mse * self.weights  # Apply the weights
         
         correctness_term = self.check_characteristic_correctness(input, target)
-        print("mse: ", torch.sum(mse))
-        print("correctness_term: ", correctness_term)
+        # print("mse: ", torch.sum(mse))
+        # print("correctness_term: ", correctness_term)
         # exit(0)
-        total_loss = torch.sum(mse) + self.alpha * correctness_term
+        total_loss = torch.sum(mse) + self.alpha * (100-correctness_term)
         
         return total_loss
     
@@ -282,8 +282,8 @@ class weighted_mse_scale_mse():
                     buckets = feature_buckets[self.selected_indices[feature]]
                     input_buckets = self.check_buckets(input_seq.cpu().numpy(), buckets)
                     target_buckets = self.check_buckets(target_seq.cpu().numpy(), buckets)
-                    print("input_buckets: ", input_buckets)
-                    print("target_buckets: ", target_buckets)
+                    # print("input_buckets: ", input_buckets)
+                    # print("target_buckets: ", target_buckets)
                     
                     # Check if both input and target have the same bucket distribution
                     if input_buckets == target_buckets:
@@ -295,10 +295,10 @@ class weighted_mse_scale_mse():
 
                             target_continuous = self.check_continuous_pattern(target_seq)
                             target_stable = self.check_stable(target_seq)
-                            print("input_continuous: ", input_continuous)
-                            print("input_stable: ", input_stable)
-                            print("target_continuous: ", target_continuous)
-                            print("target_stable: ", target_stable)
+                            # print("input_continuous: ", input_continuous)
+                            # print("input_stable: ", input_stable)
+                            # print("target_continuous: ", target_continuous)
+                            # print("target_stable: ", target_stable)
 
                             # Correctness: True if both input and target exhibit the same patterns
                             if (input_continuous == target_continuous) and (input_stable == target_stable):
@@ -315,7 +315,7 @@ class weighted_mse_scale_mse():
                     
                 total_checks += 1  # Increment the number of checks
 
-        return correctness / total_checks * 100  # Return normalized correctness
+        return correctness / total_checks * 100  # Return percentage correctness
     
 def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):  
     # model 1: 2*loss, model 2: 2x scale mse, model 3: 2x output and target
