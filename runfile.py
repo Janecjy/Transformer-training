@@ -51,7 +51,7 @@ adam_beta2 = args.AdamBeta2
 selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
 alpha = args.Alpha
-save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_selected_"+','.join(map(str, selected_indices))+"_lossweight_"+','.join(map(str, loss_weight))+"_norw"
+save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_class"
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
@@ -65,12 +65,12 @@ PREDICTION_LENGTH = 32
 
 with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
-    train_dataset = train_dataset[:, :, selected_indices]
+    # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
 
 with open('NEwDatasets-new/FullDataset.p', 'rb') as f:
     d = pickle.load(f)
-N = d['normalizer'].detach().cpu().numpy()[selected_indices]
+# N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
 model = Seq2SeqWithEmbeddingmod(num_encoder_layers=num_encoder_layers,
                              num_decoder_layers=num_decoder_layers,
@@ -94,4 +94,4 @@ else:
     # weights[-9:] = np.arange(1,10,1)
     # print(weights)
     weights = 1/sum(weights)*weights
-    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight, normalizer=N, alpha=alpha, selected_indices=selected_indices)
+    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight, alpha=alpha)

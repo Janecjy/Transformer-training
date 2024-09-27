@@ -167,6 +167,7 @@ class Seq2SeqWithEmbeddingmod(nn.Module):
                 src_padding_mask: Tensor,
                 tgt_padding_mask: Tensor,
                 memory_key_padding_mask: Tensor):
+        src = src.float()
         src = self.relu(self.embed_layer2(self.relu(self.embed_layer1(src))))
         trg = self.relu(self.embed_layer2(self.relu(self.embed_layer1(trg))))
         src, trg = src.permute(1,0,2), trg.permute(1,0,2)

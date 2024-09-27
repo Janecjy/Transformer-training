@@ -81,50 +81,69 @@ def form_dataset(filelist, context_len, prediction_len, input_dim=13):
     return mod_data
     
 def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
-    loss_func = torch.nn.MSELoss(reduction='sum')
+    loss_func = torch.nn.CrossEntropyLoss()  # Using CrossEntropyLoss for classification
     loss_traj = []
     model.train()
-    num_batch = dataset.shape[0]//batch_size
+    num_batch = dataset.shape[0] // batch_size
+
     for epoch in range(num_epochs):
-        
         epoch_loss = 0.0
         t0 = time.time()
+
         for batch in range(num_batch):
             input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
             enc_input = input[:, :-prediction_len, :].to(device)
-            dec_input = (1.5*torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+
+            # Binary class prediction (0 or 1) for the decoder input
+            dec_input = torch.ones((batch_size, prediction_len, input.shape[2])).to(device)  # You can initialize this based on your setup
+            
+            # Mask creation
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
-            expected_output = input[:, -prediction_len:, :].to(device)
+            
+            # Target is now class labels (0 or 1)
+            expected_output = input[:, -prediction_len:, :].to(device).long()
+
+            # Forward pass
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+
+            # CrossEntropyLoss expects [batch_size, num_classes, seq_len]
+            model_out = model_out.reshape(-1, 2)  # Reshape model output for classification (binary: 2 classes)
+            expected_output = expected_output.reshape(-1)  # Flatten expected output to match model output shape
+            
             optimizer.zero_grad()
-            expected_shape = model_out.shape[-2]*model_out.shape[-1]
-            loss = loss_func(model_out.reshape(-1, expected_shape), expected_output.reshape(-1, expected_shape))
+            loss = loss_func(model_out, expected_output)
             loss.backward()
             optimizer.step()
+
             epoch_loss += loss.item()
+
         epoch_time = time.time() - t0
         epoch_loss /= num_batch
         loss_traj += [epoch_loss]
-        
+
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds")
         print(f"Epoch loss = {epoch_loss:.6f}")
-        if (epoch+1)%10 == 0:
+
+        if (epoch+1) % 10 == 0 or epoch == num_epochs-1:
             print(f"Epoch loss = {epoch_loss:.6f}")
-        if epoch == num_epochs-1:
-            print(f"Final Epoch: Loss = {epoch_loss:.6f}")
             if checkpoint_suffix is not None:
                 with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
                     pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
                 torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
 
-        if epoch == 249 and checkpoint_suffix is not None:
-            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')
+        if epoch == 49 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-50iter.p')
+        if epoch == 99 and checkpoint_suffix is not None:
+            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-100iter.p')
         if epoch == 499 and checkpoint_suffix is not None:
             torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-500iter.p')
 
+        # Shuffle dataset after each epoch
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
+
     return model, loss_traj
+
 
 
 def train_model_long(model, dataset, optimizer, prediction_len, min_context_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
