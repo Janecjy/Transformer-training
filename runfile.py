@@ -68,8 +68,8 @@ with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
 
-with open('NEwDatasets-new/FullDataset.p', 'rb') as f:
-    d = pickle.load(f)
+# with open('NEWDatasets/FullDataset.p', 'rb') as f:
+#     d = pickle.load(f)
 # N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
 model = Seq2SeqWithEmbeddingmod(num_encoder_layers=num_encoder_layers,

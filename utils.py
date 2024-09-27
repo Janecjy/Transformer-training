@@ -81,7 +81,7 @@ def form_dataset(filelist, context_len, prediction_len, input_dim=13):
     return mod_data
     
 def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
-    loss_func = torch.nn.CrossEntropyLoss()  # Using CrossEntropyLoss for classification
+    loss_func = torch.nn.BCELoss()  # Using BCELoss for binary classification
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0] // batch_size
@@ -101,14 +101,19 @@ def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NU
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             
             # Target is now class labels (0 or 1)
-            expected_output = input[:, -prediction_len:, :].to(device).long()
+            expected_output = input[:, -prediction_len:, :].to(device).float()
+            # print("expected_output shape before: ", expected_output.shape)
 
             # Forward pass
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+            # print("model_out shape before: ", model_out.shape)
 
             # CrossEntropyLoss expects [batch_size, num_classes, seq_len]
-            model_out = model_out.reshape(-1, 2)  # Reshape model output for classification (binary: 2 classes)
-            expected_output = expected_output.reshape(-1)  # Flatten expected output to match model output shape
+            # model_out = model_out.reshape(-1)  # Reshape model output to [batch_size * seq_len, num_classes]
+            # expected_output = expected_output.reshape(-1)  # Reshape expected output to [batch_size * seq_len]
+
+            # print("model_out shape: ", model_out.shape)
+            # print("expected_out shape: ", expected_output.shape)
             
             optimizer.zero_grad()
             loss = loss_func(model_out, expected_output)
