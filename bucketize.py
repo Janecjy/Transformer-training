@@ -4,31 +4,43 @@ import numpy as np
 import time
 
 # Load the dataset
-dataset_name = 'FullDataset-new-filtered1'
-with open('NEwDatasets-new/FullDataset.p', 'rb') as f:
+dataset_name = 'FullDataset1x-filtered1'
+with open('NEWDatasets/'+dataset_name+'.p', 'rb') as f:
     d = pickle.load(f)
+train_dataset = d['data']
 N = d['normalizer'].detach().cpu().numpy()  # Load normalizer
 
-with open('./NEWDatasets/' + dataset_name + '-test.p', 'rb') as f:
-    train_dataset = pickle.load(f)
-    # train_dataset = train_dataset[0:1, :, :]  # Adjusted for a single dataset
-    # print(train_dataset.shape)
-
 # The bucket boundaries for each feature index
-bucket_boundaries = {
-    1: [5, 7, 8, 10, 14, 23, 34, 48, 69],
-    4: [20, 26, 31, 34, 37, 40, 42, 46, 51, 60],
-    6: [1, 2, 3, 5],
-    8: [1, 2, 3, 4, 5, 9, 14, 20, 30],
-    12: [0.5, 0.6, 1.15, 1.74, 2.32, 2.9, 3.48, 4.64, 6.37, 8.1, 9.85, 11.58, 13.9, 16.22, 19.11, 23.17, 29.54]
+bucket_boundaries_1x = {
+    1: [2, 3, 4, 5, 7, 8, 9, 12, 169],
+    4: [20, 42.5, 46, 48.7, 51, 54, 58, 63, 70, 87, 3198],
+    6: [1, 2, 3, 4, 5, 12],
+    8: [1, 2, 3, 4, 5, 12],
+    12: [0.6, 1.16, 1.74, 2.32, 2.9, 3.48, 8.1]
 }
 
+bucket_boundaries_10x = {
+    1: [3, 5, 8, 15, 24, 34, 46, 60, 81, 743],
+    4: [20, 28, 32, 34, 37, 39, 40, 42, 45, 58, 1998],
+    6: [1, 2, 3, 4, 6, 11, 408],
+    8: [2, 3, 5, 8, 11, 15, 19, 23, 29, 39, 125],
+    12: [0.6, 1.16, 1.74, 2.9, 4.63, 6.37, 8.1, 9.3, 11, 12.16, 14, 16.22, 18, 20.27, 23.17, 16.64, 32.44, 70]
+}
+
+if '1x' in dataset_name:
+    bucket_boundaries = bucket_boundaries_1x
+elif '10x' in dataset_name:
+    bucket_boundaries = bucket_boundaries_10x
+    
 # Function to assign each value to a bucket
 def assign_buckets(values, boundaries):
     # print("values: ", values)
     bucket_counts = np.zeros((values.shape[0], len(boundaries) + 1), dtype=int)
     for i, boundary in enumerate(boundaries):
-        bucket_counts[:, i] = (values < boundary).sum(axis=1)
+        if i > 0:
+            bucket_counts[:, i] = ((values < boundary) & (values >= boundaries[i-1])).sum(axis=1)
+        else:
+            bucket_counts[:, i] = (values < boundary).sum(axis=1)
     bucket_counts[:, -1] = (values >= boundaries[-1]).sum(axis=1)
     # print("bucket counts: ", bucket_counts)
     return bucket_counts
@@ -55,6 +67,7 @@ def single_thread_process(train_dataset, normalizer):
     for sample in train_dataset:
         transformed_sample = process_sample(sample, normalizer)
         transformed_dataset.append(transformed_sample)
+        # return transformed_dataset
     
     # Convert the list to a torch tensor
     transformed_dataset = torch.tensor(transformed_dataset)
@@ -70,5 +83,5 @@ print("Transformed dataset shape: ", transformed_dataset.shape)
 # print("Transformed dataset: ", transformed_dataset)
 
 # Save the transformed dataset
-with open('./NEWDatasets/FullDataset-new-filtered1-bucketized-test.p', 'wb') as f:
+with open('./NEWDatasets/'+dataset_name+'-bucketized.p', 'wb') as f:
     pickle.dump(transformed_dataset, f, pickle.HIGHEST_PROTOCOL)

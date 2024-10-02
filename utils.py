@@ -81,7 +81,7 @@ def form_dataset(filelist, context_len, prediction_len, input_dim=13):
     return mod_data
     
 def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
-    loss_func = torch.nn.BCELoss()  # Using BCELoss for binary classification
+    loss_func = torch.nn.CrossEntropyLoss()  # Using CrossEntropyLoss for classification
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0] // batch_size
@@ -101,19 +101,14 @@ def train_model(model, dataset, optimizer, prediction_len, device, num_epochs=NU
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             
             # Target is now class labels (0 or 1)
-            expected_output = input[:, -prediction_len:, :].to(device).float()
-            # print("expected_output shape before: ", expected_output.shape)
+            expected_output = input[:, -prediction_len:, :].to(device).long()
 
             # Forward pass
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-            # print("model_out shape before: ", model_out.shape)
 
             # CrossEntropyLoss expects [batch_size, num_classes, seq_len]
-            # model_out = model_out.reshape(-1)  # Reshape model output to [batch_size * seq_len, num_classes]
-            # expected_output = expected_output.reshape(-1)  # Reshape expected output to [batch_size * seq_len]
-
-            # print("model_out shape: ", model_out.shape)
-            # print("expected_out shape: ", expected_output.shape)
+            model_out = model_out.reshape(-1, 2)  # Reshape model output for classification (binary: 2 classes)
+            expected_output = expected_output.reshape(-1)  # Flatten expected output to match model output shape
             
             optimizer.zero_grad()
             loss = loss_func(model_out, expected_output)
@@ -455,55 +450,75 @@ def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
     
-def train_model_reweighted1(model, dataset, optimizer, weights, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
+def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, num_classes=2, vocab_dict=None):
     
-    # torch.save(model, './Models/tmp.p')
-    
-    loss_func = weighted_mse(weights, device, dataset.shape[2])
+    # Use cross-entropy loss for multi-class classification
+    loss_func = nn.CrossEntropyLoss()
     loss_traj = []
-    # model = torch.load('./Models/tmp.p', map_location=device)
     model.train()
-    num_batch = dataset.shape[0]//batch_size
+    num_batch = dataset.shape[0] // batch_size
+    
     for epoch in range(num_epochs):
-        
         epoch_loss = 0.0
         t0 = time.time()
+        
         for batch in range(num_batch):
             input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
             enc_input = input[:, :-prediction_len, :].to(device)
-            dec_input = (1.5*torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+            dec_input = (1.5 * torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             expected_output = input[:, -prediction_len:, :].to(device)
+
+            # Forward pass
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             optimizer.zero_grad()
-            expected_shape = model_out.shape[-2]*model_out.shape[-1]
-            
-            loss = 20.0*loss_func.loss(model_out, expected_output)
+
+            # Transform expected_output to class indices
+            batch_classes = []
+            for i in range(batch_size):
+                for t in range(prediction_len):
+                    vector = tuple(expected_output[i, t, :].tolist())
+                    class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
+                    if class_idx == -1:
+                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                    batch_classes.append(class_idx)
+
+            # Convert to tensor and move to device
+            batch_classes = torch.tensor(batch_classes, dtype=torch.long).to(device)
+            batch_classes = batch_classes.view(batch_size, prediction_len)  # Reshape for batch
+
+            # Compute the loss for each time step
+            loss = 0
+            for i in range(prediction_len):
+                logits = model_out[:, i, :]  # Model output for time step i
+                loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
+                # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
+
+            # Backpropagation
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
-            print(f"Batch {batch+1}/{num_batch}: Loss1 = {loss.item():.6f}", flush=True)
+        
+        # Epoch time and loss
         epoch_time = time.time() - t0
         epoch_loss /= num_batch
-        loss_traj += [epoch_loss]
+        loss_traj.append(epoch_loss)
         
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds, Loss = {epoch_loss:.6f}")
-        if (epoch+1)%10 == 0:
-            print(f"Epoch loss = {epoch_loss:.6f}")
-        if epoch == num_epochs-1:
-            print(f"Final Epoch: Loss = {epoch_loss:.6f}")
-            if checkpoint_suffix is not None:
-                with open('./Loss_log_'+checkpoint_suffix+'.p', 'wb') as f:
-                    pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-                torch.save(model, './Models/'+checkpoint_suffix+'-1000iter.p')
+        
+        # Optionally save checkpoints
+        if checkpoint_suffix is not None and (epoch + 1) % 10 == 0:
+            with open('./Loss_log_' + checkpoint_suffix + '.p', 'wb') as f:
+                pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
+            torch.save(model, './Models/' + checkpoint_suffix + '-1000iter.p')
 
-        if epoch == 249 and checkpoint_suffix is not None:
-            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-250iter.p')
-        if epoch == 499 and checkpoint_suffix is not None:
-            torch.save(model, './Models/Checkpoint-'+checkpoint_suffix+'-500iter.p')
-
+        # Shuffle dataset at the end of each epoch
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
+
+    print(f"Final Epoch: Loss = {epoch_loss:.6f}")
+    return model, loss_traj
         
 def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0, selected_indices=None):
     
@@ -584,38 +599,52 @@ def test_model(model, dataset, prediction_len, device):
 
 
 def test_model_batched(model, dataset, batch_size, prediction_len, device, mae):
-    model = model.eval()
-    if not mae: loss_func = nn.MSELoss(reduction='mean')
-    else: loss_func = nn.L1Loss(reduction='mean')
+    model = model.eval()  # Set the model to evaluation mode
+    if mae:
+        loss_func = nn.L1Loss(reduction='mean')  # Use MAE if mae is True
+    else:
+        loss_func = nn.BCELoss()  # Use BCEWithLogitsLoss for binary classification
+
     num_samples = dataset.shape[0]
     num_features = dataset.shape[2]
     print(f'Total test samples = {num_samples}')
-    num_batches = num_samples//batch_size
+    
+    num_batches = num_samples // batch_size
     test_loss = np.zeros((num_batches, prediction_len, num_features))
     outputs = []
+
     for i in range(num_batches):
         print(f'Starting batch {i+1} of {num_batches}')
-        sample = dataset[i*batch_size:(i+1)*batch_size,:,:].clone()
-        enc_input = sample[:,:-prediction_len, :].to(device)
-        dec_input = (1.5*torch.ones((batch_size, prediction_len, sample.shape[2]))).to(device)
-        expected_output = sample[:, -prediction_len:, :].to(device)
+        
+        # Get a batch of data
+        sample = dataset[i * batch_size:(i + 1) * batch_size, :, :].clone()
+        
+        # Split into encoder input and decoder input
+        enc_input = sample[:, :-prediction_len, :].to(device)
+        dec_input = (1.5 * torch.ones((batch_size, prediction_len, sample.shape[2]))).to(device)
+        
+        # The expected output is the last part of the input sequence
+        expected_output = sample[:, -prediction_len:, :].to(device).float()
+        
+        # Generate masks for the transformer
         src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+        
+        # Get the model output
         model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-        # print("model_out shape: ", model_out.shape)
+        
         # Calculate loss for each feature and each time step in the current batch
         for j in range(prediction_len):
             for k in range(num_features):
-                test_loss[i, j, k] = loss_func(model_out[:, j, k], expected_output[:, j, k]).item()
-    # print("test_loss shape: ", test_loss.shape)
+                # If BCEWithLogitsLoss is used, sigmoid needs to be applied to model output
+                if not mae:
+                    model_out_sigmoid = torch.sigmoid(model_out[:, j, k])
+                    test_loss[i, j, k] = loss_func(model_out_sigmoid, expected_output[:, j, k]).item()
+                else:
+                    test_loss[i, j, k] = loss_func(model_out[:, j, k], expected_output[:, j, k]).item()
     
-    # Compute average test loss across all batches and prediction steps for each feature
+    # Compute the average test loss across all batches and prediction steps for each feature
     average_test_loss_per_feature = np.mean(test_loss, axis=0)
-    # print("average_test_loss_per_feature shape: ", average_test_loss_per_feature.shape)
-    # outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
     
     return average_test_loss_per_feature, outputs
-    #     test_loss[i,:] = [loss_func(model_out[:,j,:], expected_output[:,j,:]).item() for j in range(prediction_len)]
-    # test_loss = (1/batch_size)*test_loss
-    # outputs = np.concatenate(outputs, axis=0)  # Convert list of arrays to a single NumPy array
-    # return test_loss, outputs
+
 
