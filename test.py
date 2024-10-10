@@ -4,12 +4,42 @@ from models import create_mask
 import random
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+import torch.nn as nn
+# from runvocabmlp import MLP
 import sys
 import numpy as np
 
 PAD_IDX = 2
 DEVICE = 'cpu'
 ITER = sys.argv[1]
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, output_dim, hidden_dim=512) -> None:
+        super(MLP, self).__init__()
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+        self.hidden_dim = hidden_dim
+
+        if hidden_dim is not None: 
+            self.mlp = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, output_dim),
+                nn.Softmax(dim=1)  # Softmax layer added here
+            )
+        else:
+            self.mlp = nn.Sequential(
+                nn.Linear(input_dim, output_dim), 
+                nn.ReLU(),
+                nn.Softmax(dim=1)  # Softmax layer added here
+            )
+    
+    def forward(self, x):
+        x = x.float()
+        x = self.mlp(x)
+        return x
 
 # Example of bucket boundaries for different features
 bucket_boundaries_1x = {
@@ -21,13 +51,14 @@ bucket_boundaries_1x = {
 }
 
 
-def test_model_accuracy(model, dataset, vocab_dict, prediction_len, batch_size=32, device='cpu'):
+def test_model_accuracy(model_list, model_name_list, is_transformer_list, dataset, vocab_dict, prediction_len, batch_size=32, device='cpu'):
     """
     Test the accuracy of the model by comparing the predicted class (max index in output)
     with the true class from the dataset.
     
     Args:
-    - model: Trained Seq2SeqWithEmbeddingmod model.
+    - model_list: List of models.
+    - is_transformer_list: List of booleans indicating whether the model is a transformer.
     - dataset: Test dataset (tensor).
     - vocab_dict: Dictionary mapping 44-size vectors to class indices.
     - prediction_len: Length of the prediction (number of tokens to predict).
@@ -37,8 +68,9 @@ def test_model_accuracy(model, dataset, vocab_dict, prediction_len, batch_size=3
     Returns:
     - accuracy: The accuracy of the model on the test dataset.
     """
-    model.eval()  # Set model to evaluation mode
-    correct_predictions = 0
+    correct_predictions_dict = {model_name_list[i]: 0 for i in range(len(model_name_list))}
+    for i, model in enumerate(model_list):
+        model.eval()  # Set model to evaluation mode
     total_predictions = 0
     
     num_batches = dataset.shape[0] // batch_size
@@ -51,9 +83,6 @@ def test_model_accuracy(model, dataset, vocab_dict, prediction_len, batch_size=3
             
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             expected_output = input_batch[:, -prediction_len:, :].to(device)
-
-            # Forward pass through the model to get the predicted probabilities
-            model_output = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             
             # Convert expected_output to class indices (ground truth)
             batch_classes = []
@@ -68,19 +97,29 @@ def test_model_accuracy(model, dataset, vocab_dict, prediction_len, batch_size=3
             # Convert to tensor and move to device
             batch_classes = torch.tensor(batch_classes, dtype=torch.long).to(device)
             batch_classes = batch_classes.view(batch_size, prediction_len)
+            
+            for i, model in enumerate(model_list):
+                if is_transformer_list[i]:
+                    # Forward pass through the model to get the predicted probabilities
+                    model_output = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+                else:
+                    enc_input = enc_input.reshape(enc_input.shape[0], enc_input.shape[1]*enc_input.shape[2])
+                    model_output = model(enc_input)
+                    model_output = model_output.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
 
-            # Check if the predicted class (max index) matches the ground truth class
-            for i in range(prediction_len):
-                predicted_probs = model_output[:, i, :]  # Predicted probability for each time step
-                predicted_classes = torch.argmax(predicted_probs, dim=-1)  # Get the index of the max probability
-                
-                correct_predictions += torch.sum(predicted_classes == batch_classes[:, i]).item()
-                total_predictions += batch_size
+                # Check if the predicted class (max index) matches the ground truth class
+                for j in range(prediction_len):
+                    predicted_probs = model_output[:, j, :]  # Predicted probability for each time step
+                    predicted_classes = torch.argmax(predicted_probs, dim=-1)  # Get the index of the max probability
+                    
+                    correct_predictions_dict[model_name_list[i]] += torch.sum(predicted_classes == batch_classes[:, j]).item()
+                    total_predictions += batch_size
         
     # Calculate the accuracy
-    accuracy = correct_predictions / total_predictions
-    print(f"Accuracy: {accuracy * 100:.2f}%")
-    return accuracy
+    for model_name in model_name_list:
+        correct_predictions = correct_predictions_dict[model_name]
+        accuracy = correct_predictions / total_predictions
+        print(f"Accuracy for {model_name}: {accuracy * 100:.2f}%")
 
 def plot_predictions_for_sample(model, dataset, vocab_dict, prediction_len, sample_idx, device=DEVICE):
     """
@@ -318,21 +357,27 @@ def process_and_calculate_distances(true_vectors, predicted_vectors, bucket_boun
     plt.close()  # Close the figure to save memory
 
 # Test the model
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
-#     vocab_dict = pickle.load(f_vocab)
+with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
+    vocab_dict = pickle.load(f_vocab)
 
-# model = torch.load('Models/Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter.p', map_location=DEVICE)
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-test.p', 'rb') as f:
-#     test_dataset = pickle.load(f)
+transformer_model_name = 'BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter'
+transformer_model = torch.load('Models/Checkpoint-'+transformer_model_name+'.p', map_location=DEVICE)
+mlp_model_name = 'MLP-Checkpoint-102-'+str(ITER)+'iter'
+mlp_model = torch.load('Models/'+mlp_model_name+'.p', map_location=DEVICE)
+model_list = [transformer_model, mlp_model]
+model_name_list = [transformer_model_name, mlp_model_name]
+is_transformer_list = [True, False]
+with open('NEWDatasets/FullDataset1x-filtered1-bucketized-test.p', 'rb') as f:
+    test_dataset = pickle.load(f)
 # Assuming the test dataset is loaded in `test_dataset`
-# prediction_len = 32
-# test_accuracy = test_model_accuracy(model, test_dataset, vocab_dict, prediction_len=prediction_len, batch_size=32, device='cpu')
+prediction_len = 32
+test_model_accuracy(model_list, model_name_list, is_transformer_list, test_dataset, vocab_dict, prediction_len=prediction_len, batch_size=32, device='cpu')
 # plot_predictions_for_sample(model, test_dataset, vocab_dict, prediction_len=prediction_len, sample_idx=0, device=DEVICE)
 # test_and_plot_distribution(model, test_dataset, vocab_dict, prediction_len=32, batch_size=32, vocab_size=3231, iteration=ITER)
 # process_and_calculate_distances()
-with open('NEWDatasets/FullDataset1x-filtered1-bucketized-true_values.p', 'rb') as f_true:
-    true_values = pickle.load(f_true)
-with open('NEWDatasets/FullDataset1x-filtered1-bucketized-predicted_values.p', 'rb') as f_pred:
-    predicted_values = pickle.load(f_pred)
-process_and_calculate_distances(true_values, predicted_values, bucket_boundaries_1x)
+# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-true_values.p', 'rb') as f_true:
+#     true_values = pickle.load(f_true)
+# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-predicted_values.p', 'rb') as f_pred:
+#     predicted_values = pickle.load(f_pred)
+# process_and_calculate_distances(true_values, predicted_values, bucket_boundaries_1x)
 
