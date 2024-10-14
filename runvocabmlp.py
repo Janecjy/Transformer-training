@@ -85,6 +85,11 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
             # Convert to tensor and move to device
             batch_classes = torch.tensor(batch_classes, dtype=torch.long).to(device)
             batch_classes = batch_classes.view(batch_size, prediction_len)  # Reshape for batch
+
+            # Create mask for valid targets
+            valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
+            valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
+
             
             model_out = model_out.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
 
@@ -98,6 +103,10 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
                 loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
                 # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
                 # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
+                per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+
+                # Only consider losses where valid
+                loss += per_step_loss[valid_indices]
 
             # Backpropagation
             loss.backward()
