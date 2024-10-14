@@ -1,5 +1,5 @@
 import torch
-from models import Seq2SeqWithEmbeddingmodClass
+from models import Seq2SeqWithEmbeddingmodClass, Seq2SeqWithEmbeddingmodClassMoreEmbedding
 from utils import train_model, train_model_vocab#, train_model_reweighted2, train_model_reweighted3
 import pickle
 import argparse
@@ -35,6 +35,7 @@ parser.add_argument('--AdamBeta2', '-AB2', help='Beta2 for Adam Optimizer', type
 parser.add_argument('--SelectedIndices', '-SI', help='Comma-separated list of indices to select', type=parse_indices, default="0,1,2,3,4,5,6,7,8,9,10,11,12")
 parser.add_argument('--LossWeight', '-LW', help='Weight for the loss function', type=parse_indices, default="1,1,1,1,1,1,1,1,1,1,1,1,1")
 parser.add_argument('--Alpha', '-A', help='Alpha for the reweighted loss function', type=float, default=0.0)
+parser.add_argument('--MoreEmbedding', '-ME', help='Whether to use more embedding layers', type=str2bool, default=False)
 args = parser.parse_args()
 dataset_name = args.Dataset 
 gpu = args.GPUNumber
@@ -52,6 +53,7 @@ selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
 alpha = args.Alpha
 save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_vocab"
+more_embedding = args.MoreEmbedding
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
@@ -75,13 +77,13 @@ with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
 #     d = pickle.load(f)
 # N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
-with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
+with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
         vocab_dict = pickle.load(f_vocab)
         num_classes = len(vocab_dict)
         print("vocab dict size: ", num_classes)
     
-
-model = Seq2SeqWithEmbeddingmodClass(num_encoder_layers=num_encoder_layers,
+if more_embedding:
+    model = Seq2SeqWithEmbeddingmodClassMoreEmbedding(num_encoder_layers=num_encoder_layers,
                              num_decoder_layers=num_decoder_layers,
                              input_size=train_dataset.shape[-1],
                              emb_size=emb_size,
@@ -89,6 +91,15 @@ model = Seq2SeqWithEmbeddingmodClass(num_encoder_layers=num_encoder_layers,
                              dim_feedforward=dim,
                              dropout=0,
                              num_classes=num_classes).to(DEVICE)
+else:
+    model = Seq2SeqWithEmbeddingmodClass(num_encoder_layers=num_encoder_layers,
+                                num_decoder_layers=num_decoder_layers,
+                                input_size=train_dataset.shape[-1],
+                                emb_size=emb_size,
+                                nhead=nhead,
+                                dim_feedforward=dim,
+                                dropout=0,
+                                num_classes=num_classes).to(DEVICE)
 
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 

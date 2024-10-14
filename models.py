@@ -232,3 +232,53 @@ class Seq2SeqWithEmbeddingmodClass(nn.Module):
         probs = self.softmax(logits)  # Convert logits to probabilities
         # outs = self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(transformer_outs))))
         return probs
+    
+class Seq2SeqWithEmbeddingmodClassMoreEmbedding(nn.Module):
+    def __init__(self,
+                 num_encoder_layers: int,
+                 num_decoder_layers: int,
+                 input_size: int,
+                 emb_size: int,
+                 nhead: int,
+                 dim_feedforward: int = 512,
+                 dropout: float = 0.1,
+                 num_classes: int = 3231):  # Add num_classes parameter
+        super(Seq2SeqWithEmbeddingmodClassMoreEmbedding, self).__init__()
+        self.transformer = Transformer(d_model=emb_size,
+                                       nhead=nhead,
+                                       num_encoder_layers=num_encoder_layers,
+                                       num_decoder_layers=num_decoder_layers,
+                                       dim_feedforward=dim_feedforward,
+                                       dropout=dropout,
+                                       batch_first=True)
+        self.embed_layer1 = nn.Linear(input_size, 2048)
+        self.embed_layer2 = nn.Linear(2048, 512)
+        self.embed_layer3 = nn.Linear(512, emb_size)
+        self.positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
+        self.de_embed_layer1 = nn.Linear(emb_size, 512)
+        self.de_embed_layer2 = nn.Linear(512, 2048)
+        self.de_embed_layer3 = nn.Linear(2048, num_classes)  # Change output layer to num_classes
+        self.softmax = nn.Softmax(dim=-1)  # Apply softmax over the class dimension
+        self.relu = nn.ReLU()
+
+    def forward(self,
+                src: Tensor,
+                trg: Tensor,
+                src_mask: Tensor,
+                tgt_mask: Tensor,
+                src_padding_mask: Tensor,
+                tgt_padding_mask: Tensor,
+                memory_key_padding_mask: Tensor):
+        src = src.float()
+        src = self.relu(self.embed_layer3(self.relu(self.embed_layer2(self.relu(self.embed_layer1(src))))))
+        trg = self.relu(self.embed_layer3(self.relu(self.embed_layer2(self.relu(self.embed_layer1(trg))))))
+        src, trg = src.permute(1, 0, 2), trg.permute(1, 0, 2)
+        src_pos = self.positional_encoding(src)
+        tgt_pos = self.positional_encoding(trg)
+        src_pos, tgt_pos = src_pos.permute(1, 0, 2), tgt_pos.permute(1, 0, 2)
+        transformer_outs = self.transformer(src_pos, tgt_pos, src_mask, tgt_mask, None,
+                                            src_padding_mask, tgt_padding_mask, memory_key_padding_mask)
+        logits = self.relu(self.de_embed_layer3(self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(transformer_outs))))))
+        probs = self.softmax(logits)
+        # outs = self.relu(self.de_embed_layer2(self.relu(self.de_embed_layer1(transformer_outs))))
+        return probs
