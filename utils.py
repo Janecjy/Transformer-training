@@ -473,6 +473,7 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             optimizer.zero_grad()
 
+            # use tokenizer
             # Transform expected_output to class indices
             batch_classes = []
             for i in range(batch_size):
@@ -511,7 +512,7 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
         if checkpoint_suffix is not None and (epoch + 1) % 10 == 0:
             with open('./Loss_log_' + checkpoint_suffix + '.p', 'wb') as f:
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-            torch.save(model, './Models/' + checkpoint_suffix + '-1000iter.p')
+            torch.save(model, './Models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
 
         # Shuffle dataset at the end of each epoch
         shuffle_idx = torch.randperm(dataset.shape[0])
