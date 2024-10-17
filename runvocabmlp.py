@@ -10,8 +10,8 @@ import time
 from utils import test_model_batched, test_model, weighted_mse
 
 #CONSTANTS
-# DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-DEVICE = "cpu"
+DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+# DEVICE = "cpu"
 print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024
@@ -54,7 +54,7 @@ def train_linear_model(model, dataset, optimizer, prediction_len, device, num_ep
 
 
 def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix='102', vocab_dict=None):
-    loss_func = nn.CrossEntropyLoss(reduction='none')
+    loss_func = nn.CrossEntropyLoss()
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0]//batch_size
@@ -87,8 +87,8 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
             batch_classes = batch_classes.view(batch_size, prediction_len)  # Reshape for batch
 
             # Create mask for valid targets
-            valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
-            valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
+            # valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
+            # valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
 
             
             model_out = model_out.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
@@ -100,13 +100,13 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
             for i in range(prediction_len):
                 logits = model_out[:, i, :]  # Model output for time step i
                 # print("logits.shape: ", logits.shape)
-                # loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
                 # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
                 # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
-                current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
-                per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                # current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
+                # per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
                 # Only consider losses where valid
-                loss += per_step_loss[current_valid_mask].sum()
+                # loss += per_step_loss[current_valid_mask].sum()
 
             # Backpropagation
             loss.backward()

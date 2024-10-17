@@ -453,7 +453,7 @@ def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, 
 def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, num_classes=2, vocab_dict=None):
     
     # Use cross-entropy loss for multi-class classification
-    loss_func = nn.CrossEntropyLoss(reduction='none')
+    loss_func = nn.CrossEntropyLoss()
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0] // batch_size
@@ -499,8 +499,8 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
             assert (batch_classes < num_classes).all(), "Class indices exceed number of classes."
 
 
-            valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
-            valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
+            # valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
+            # valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
 
             
             model_out = model_out.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
@@ -512,13 +512,13 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
             for i in range(prediction_len):
                 logits = model_out[:, i, :]  # Model output for time step i
                 # print("logits.shape: ", logits.shape)
-                # loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
                 # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
                 # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
-                current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
-                per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                # current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
+                # per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
                 # Only consider losses where valid
-                loss += per_step_loss[current_valid_mask].sum()
+                # loss += per_step_loss[current_valid_mask].sum()
 
             # Backpropagation
             loss.backward()

@@ -41,14 +41,24 @@ class MLP(nn.Module):
         x = self.mlp(x)
         return x
 
-# Example of bucket boundaries for different features
+# The bucket boundaries for each feature index
 bucket_boundaries_1x = {
-    1: [2, 3, 4, 5, 7, 8, 9, 12, 169],
+    1: [2, 3, 4, 5, 6, 7, 8, 10, 12, 169],
     4: [20, 42.5, 46, 48.7, 51, 54, 58, 63, 70, 87, 3198],
     6: [1, 2, 3, 4, 5, 12],
-    8: [1, 2, 3, 4, 5, 12],
-    12: [0.6, 1.16, 1.74, 2.32, 2.9, 3.48, 8.1]
+    8: [1, 2, 3, 4, 5, 13],
+    12: [0.6, 1.16, 1.74, 2.32, 2.9, 3.48, 4.05, 16.8]
 }
+
+bucket_boundaries_10x = {
+    1: [1, 4, 7, 11, 17, 24, 33, 43, 57, 77, 1414],
+    4: [20, 25.4, 29.6, 32.5, 35, 37, 39, 41, 43, 50, 1998],
+    6: [2, 3, 4, 5, 7, 12, 412],
+    8: [2, 3, 5, 7, 10, 13, 17, 21, 27, 37, 126],
+    12: [ 0.58, 1.16, 1.74,  2.32,  2.9 ,  3.48,
+        4.05,  5.21,  5.79,  6.37,  7.53,  8.11,  8.69,  9.85, 10.43,
+       11.58, 12.74, 13.32, 14.48, 16.22, 17.38, 19.11, 20.85, 22.59,
+       25.48, 28.96, 35.33, 70.08]}
 
 
 def test_model_accuracy(model_list, model_name_list, is_transformer_list, dataset, vocab_dict, prediction_len, batch_size=32, device='cpu'):
@@ -91,7 +101,7 @@ def test_model_accuracy(model_list, model_name_list, is_transformer_list, datase
                     vector = tuple(expected_output[i, t, :].tolist())
                     class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
                     if class_idx == -1:
-                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                        raise ValueError(f"Vector not found in vocab_dict: {vector}, expected output: {expected_output[i, t, :]}")
                     batch_classes.append(class_idx)
 
             # Convert to tensor and move to device
@@ -269,7 +279,7 @@ def test_and_plot_distribution(model, dataset, vocab_dict, prediction_len, batch
 
     # Plot the class distribution
     # plot_class_distribution(true_classes_list, predicted_classes_list, vocab_size, iteration)
-    with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabBackDict.p', 'rb') as f_vocab_back:
+    with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabBackDict.p', 'rb') as f_vocab_back:
         vocab_back_dict = pickle.load(f_vocab_back)
     process_and_calculate_distances(np.array([vocab_back_dict[class_idx] for class_idx in true_classes_list]), np.array([vocab_back_dict[class_idx] for class_idx in predicted_classes_list]), bucket_boundaries_1x)
 
@@ -371,63 +381,68 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
     - vocab_size: Number of classes in the vocabulary.
     - iteration: Iteration number for saving files.
     """
-    # model_results = {model_name: {'true_classes': [], 'predicted_classes': []} for model_name in model_name_list}
+    model_results = {model_name: {'true_classes': [], 'predicted_classes': []} for model_name in model_name_list}
 
-    # num_batches = dataset.shape[0] // batch_size
-    # with torch.no_grad():
-    #     for batch in range(num_batches):
-    #         input_batch = dataset[batch * batch_size:(batch + 1) * batch_size, :, :].clone()
-    #         enc_input = input_batch[:, :-prediction_len, :].to(DEVICE)
-    #         dec_input = (1.5 * torch.ones((batch_size, prediction_len, input_batch.shape[2]))).to(DEVICE)
+    num_batches = dataset.shape[0] // batch_size
+    with torch.no_grad():
+        for batch in range(num_batches):
+            input_batch = dataset[batch * batch_size:(batch + 1) * batch_size, :, :].clone()
+            enc_input = input_batch[:, :-prediction_len, :].to(DEVICE)
+            dec_input = (1.5 * torch.ones((batch_size, prediction_len, input_batch.shape[2]))).to(DEVICE)
             
-    #         src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=DEVICE)
-    #         expected_output = input_batch[:, -prediction_len:, :].to(DEVICE)
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=DEVICE)
+            expected_output = input_batch[:, -prediction_len:, :].to(DEVICE)
 
-    #         batch_true_classes = []
-    #         # Convert expected_output to class indices (ground truth)
-    #         for i in range(batch_size):
-    #             for t in range(prediction_len):
-    #                 vector = tuple(expected_output[i, t, :].tolist())
-    #                 class_idx = vocab_dict.get(vector, -1)
-    #                 if class_idx == -1:
-    #                     raise ValueError(f"Vector not found in vocab_dict: {vector}")
-    #                 batch_true_classes.append(class_idx)
+            batch_true_classes = []
+            # Convert expected_output to class indices (ground truth)
+            for i in range(batch_size):
+                for t in range(prediction_len):
+                    vector = tuple(expected_output[i, t, :].tolist())
+                    class_idx = vocab_dict.get(vector, -1)
+                    if class_idx == -1:
+                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                    batch_true_classes.append(class_idx)
 
-    #         # Convert to tensor and move to device
-    #         batch_true_classes = torch.tensor(batch_true_classes, dtype=torch.long).to(DEVICE)
-    #         batch_true_classes = batch_true_classes.view(batch_size, prediction_len)
+            # Convert to tensor and move to device
+            batch_true_classes = torch.tensor(batch_true_classes, dtype=torch.long).to(DEVICE)
+            batch_true_classes = batch_true_classes.view(batch_size, prediction_len)
 
-    #         for i, model in enumerate(model_list):
-    #             model_name = model_name_list[i]
+            # valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(DEVICE)
 
-    #             if is_transformer_list[i]:
-    #                 # Forward pass through the transformer model to get the predicted probabilities
-    #                 model_output = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
-    #             else:
-    #                 # Forward pass through the MLP model
-    #                 enc_input_flat = enc_input.reshape(enc_input.shape[0], enc_input.shape[1] * enc_input.shape[2])
-    #                 model_output = model(enc_input_flat)
-    #                 model_output = model_output.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
+            for i, model in enumerate(model_list):
+                model_name = model_name_list[i]
 
-    #             # Collect true and predicted classes
-    #             for t in range(prediction_len):
-    #                 predicted_probs = model_output[:, t, :]  # Predicted probability for each time step
-    #                 predicted_classes = torch.argmax(predicted_probs, dim=-1)  # Get the index of the max probability
+                if is_transformer_list[i]:
+                    # Forward pass through the transformer model to get the predicted probabilities
+                    model_output = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+                else:
+                    # Forward pass through the MLP model
+                    enc_input_flat = enc_input.reshape(enc_input.shape[0], enc_input.shape[1] * enc_input.shape[2])
+                    model_output = model(enc_input_flat)
+                    model_output = model_output.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
+
+                # Collect true and predicted classes
+                for t in range(prediction_len):
+                    predicted_probs = model_output[:, t, :]  # Predicted probability for each time step
+                    predicted_classes = torch.argmax(predicted_probs, dim=-1)  # Get the index of the max probability
                     
-    #                 model_results[model_name]['true_classes'].extend(batch_true_classes[:, t].tolist())
-    #                 model_results[model_name]['predicted_classes'].extend(predicted_classes.tolist())
+                    model_results[model_name]['true_classes'].extend(batch_true_classes[:, t].tolist())
+                    model_results[model_name]['predicted_classes'].extend(predicted_classes.tolist())
 
-    # with open('./NEWDatasets/'+str(ITER)+'iter-model-results.p', 'wb') as f_results:
-    #     pickle.dump(model_results, f_results, pickle.HIGHEST_PROTOCOL)
+    with open('./NEWDatasets/'+str(ITER)+'iter-model-results.p', 'wb') as f_results:
+        pickle.dump(model_results, f_results, pickle.HIGHEST_PROTOCOL)
     
-    with open('./NEWDatasets/'+str(ITER)+'iter-model-results.p', 'rb') as f_results:
-        model_results = pickle.load(f_results)
+    # with open('./NEWDatasets/'+str(ITER)+'iter-model-results.p', 'rb') as f_results:
+    #     model_results = pickle.load(f_results)
     
     # Plot the distributions for both models
-    with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabBackDict.p', 'rb') as f_vocab_back:
+    with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabBackDict.p', 'rb') as f_vocab_back:
         vocab_back_dict = pickle.load(f_vocab_back)
 
     plt.figure(figsize=(10, 6))
+    cdf_dict = {}
+    
+    # Plot PDF and CDF for each model
     for model_name in model_name_list:
         print(f"Processing bucket distances for {model_name}...")
         true_classes = model_results[model_name]['true_classes']
@@ -439,21 +454,41 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
         # Calculate distances
         total_distances, feature_distances = calculate_bucket_distances(true_vectors, predicted_vectors, bucket_boundaries_1x)
 
-        # Plot the overall distribution for each model
+        # Plot the overall distribution for each model (PDF)
         unique_total_distances, total_counts = np.unique(total_distances, return_counts=True)
         total_distribution = total_counts / total_counts.sum() * 100
+        # Cumulative sum to get CDF
+        cdf = np.cumsum(total_counts / total_counts.sum() * 100)
+        cdf_dict[model_name] = cdf
         
-        
-        plt.bar(unique_total_distances, total_distribution, alpha=0.6, label=model_name)
+        # PDF Plot
+        plt.plot(unique_total_distances, total_distribution, label=model_name)  # Line plot for PDF
+        print("Total distribution (PDF):", total_distribution)
 
     plt.xlabel('Distance from True Bucket')
     plt.ylabel('Percentage')
-    plt.title(f'Overall Distribution of Bucket Distances (Multiple Models)')
+    plt.title(f'PDF of Bucket Distances (Multiple Models)')
     plt.legend(loc='upper right')
     plt.grid(True)
+    plt.savefig(f'{iteration}_iter_bucket_distance_comparison_PDF.png')
+    plt.show()
+
+    # CDF Plot
+    plt.figure(figsize=(10, 6))
     
-    # Save the plot
-    plt.savefig(f'{iteration}_iter_bucket_distance_comparison.png')
+    for model_name in model_name_list:
+        
+        cdf = cdf_dict[model_name]
+        # CDF Plot
+        plt.plot(unique_total_distances, cdf, label=model_name)
+        print(f"Total CDF for {model_name}: {cdf}")
+
+    plt.xlabel('Distance from True Bucket')
+    plt.ylabel('Cumulative Percentage')
+    plt.title(f'CDF of Bucket Distances (Multiple Models)')
+    plt.legend(loc='lower right')
+    plt.grid(True)
+    plt.savefig(f'{iteration}_iter_bucket_distance_comparison_CDF.png')
     plt.show()
 
 def process_and_calculate_distances_multiple_models(bucket_boundaries):
@@ -513,22 +548,24 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 
 
 # Test the model
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
-#     vocab_dict = pickle.load(f_vocab)
+with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
+    vocab_dict = pickle.load(f_vocab)
 
-# transformer_model_name = 'BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter'
-# transformer_model = torch.load('Models/Checkpoint-'+transformer_model_name+'.p', map_location=DEVICE)
-# mlp_model_name = 'MLP-Checkpoint-102-'+str(ITER)+'iter'
-# mlp_model = torch.load('Models/'+mlp_model_name+'.p', map_location=DEVICE)
-# model_list = [transformer_model, mlp_model]
-# model_name_list = [transformer_model_name, mlp_model_name]
-# is_transformer_list = [True, False]
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-test.p', 'rb') as f:
-#     test_dataset = pickle.load(f)
+transformer_model_small_name = 'BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter'
+transformer_model_small = torch.load('Models/Checkpoint-'+transformer_model_small_name+'.p', map_location=DEVICE)
+transformer_model_large_name = 'BaseTransformer3_256_10_10_256_8_lr_1e-05_vocab-'+str(ITER)+'iter'
+transformer_model_large = torch.load('Models/Checkpoint-'+transformer_model_large_name+'.p', map_location=DEVICE)
+mlp_model_name = 'MLP-MS-Checkpoint-102-'+str(ITER)+'iter'
+mlp_model = torch.load('Models/'+mlp_model_name+'.p', map_location=DEVICE)
+model_list = [transformer_model_small, transformer_model_large, mlp_model]
+model_name_list = [transformer_model_small_name, transformer_model_large_name, mlp_model_name]
+is_transformer_list = [True, True, False]
+with open('NEWDatasets/FullDataset-filtered1-bucketized-test.p', 'rb') as f:
+    test_dataset = pickle.load(f)
 # Assuming the test dataset is loaded in `test_dataset`
-# prediction_len = 32
+prediction_len = 32
 # test_model_accuracy(model_list, model_name_list, is_transformer_list, test_dataset, vocab_dict, prediction_len=prediction_len, batch_size=32, device='cpu')
-# test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, test_dataset, vocab_dict, prediction_len, batch_size=32, vocab_size=3231, iteration=ITER)
+test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, test_dataset, vocab_dict, prediction_len, batch_size=32, vocab_size=3231, iteration=ITER)
 # plot_predictions_for_sample(model, test_dataset, vocab_dict, prediction_len=prediction_len, sample_idx=0, device=DEVICE)
 # test_and_plot_distribution(model, test_dataset, vocab_dict, prediction_len=32, batch_size=32, vocab_size=3231, iteration=ITER)
 # process_and_calculate_distances()
@@ -537,5 +574,5 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 # with open('NEWDatasets/FullDataset1x-filtered1-bucketized-predicted_values.p', 'rb') as f_pred:
 #     predicted_values = pickle.load(f_pred)
 # process_and_calculate_distances(true_values, predicted_values, bucket_boundaries_1x)
-process_and_calculate_distances_multiple_models(bucket_boundaries_1x)
+# process_and_calculate_distances_multiple_models(bucket_boundaries_1x)
 
