@@ -459,7 +459,7 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
         total_distribution = total_counts / total_counts.sum() * 100
         # Cumulative sum to get CDF
         cdf = np.cumsum(total_counts / total_counts.sum() * 100)
-        cdf_dict[model_name] = cdf
+        cdf_dict[model_name] = (unique_total_distances, cdf)
         
         # PDF Plot
         plt.plot(unique_total_distances, total_distribution, label=model_name)  # Line plot for PDF
@@ -478,7 +478,7 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
     
     for model_name in model_name_list:
         
-        cdf = cdf_dict[model_name]
+        unique_total_distances, cdf = cdf_dict[model_name]
         # CDF Plot
         plt.plot(unique_total_distances, cdf, label=model_name)
         print(f"Total CDF for {model_name}: {cdf}")
