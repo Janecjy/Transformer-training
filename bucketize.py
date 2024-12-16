@@ -3,8 +3,8 @@ import pickle
 import numpy as np
 import time
 
-# Load the dataset
-dataset_name = 'FullDataset10x-filtered1-more'
+# sets: 'Cubic-0.9, 0.4', 'Cubic-0.7, 0.8', 'Cubic-0.5, 0.4', 'Cubic-0.8, 0.8'
+dataset_name = 'DatasetCubic-0.9-0.4' # change this per
 with open('NEWDatasets/'+dataset_name+'.p', 'rb') as f:
     d = pickle.load(f)
 train_dataset = d['data']
