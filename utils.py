@@ -544,6 +544,104 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
 
     print(f"Final Epoch: Loss = {epoch_loss:.6f}")
     return model, loss_traj
+
+def train_model_vocab_autoreg(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, num_classes=2, vocab_dict=None):
+    
+    # Use cross-entropy loss for multi-class classification
+    loss_func = nn.CrossEntropyLoss()
+    loss_traj = []
+    model.train()
+    num_batch = dataset.shape[0] // batch_size
+    print(dataset.shape, num_batch)
+    
+    for epoch in range(num_epochs):
+        epoch_loss = 0.0
+        t0 = time.time()
+        
+        for batch in range(num_batch):
+            input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
+            enc_input = input[:, :-prediction_len, :].to(device)
+            dec_input = (1.5 * torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+            expected_output = input[:, -prediction_len:, :].to(device)
+
+            # Forward pass
+            optimizer.zero_grad()
+
+            # use tokenizer
+            # Transform expected_output to class indices
+            batch_classes = []
+            for i in range(batch_size):
+                for t in range(prediction_len):
+                    vector = tuple(expected_output[i, t, :].tolist())
+                    class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
+                    if class_idx == -1:
+                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                    batch_classes.append(class_idx)
+
+            # Convert to tensor and move to device
+            batch_classes = torch.tensor(batch_classes, dtype=torch.long).to(device)
+            batch_classes = batch_classes.view(batch_size, prediction_len)  # Reshape for batch
+
+            # Ensure all class indices are valid
+            if (batch_classes < 0).any() or (batch_classes >= num_classes).any():
+                raise ValueError(f"Invalid class indices found: {batch_classes}")
+            
+            # Ensure there are no negative values in batch_classes
+            assert (batch_classes >= 0).all(), "Negative class indices found in batch_classes."
+
+            # Ensure that the indices do not exceed the number of classes
+            assert (batch_classes < num_classes).all(), "Class indices exceed number of classes."
+
+
+            # valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
+            # valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
+
+          # Reshape to [batch_size, prediction_len, num_classes]
+
+            # print("model_out.shape: ", model_out.shape)
+            # print("batch_classes.shape: ", batch_classes.shape)
+            # Calculate loss
+            loss = 0
+            for i in range(prediction_len):
+                model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+                logits = model_out[:, 0, :]
+                # print("logits.shape: ", logits.shape)
+                loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
+                # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
+                # current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
+                # per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
+                # Only consider losses where valid
+                # loss += per_step_loss[current_valid_mask].sum()
+                next_token = torch.argmax(logits, dim=1).unsqueeze(1).unsqueeze(2)
+                dec_input = torch.cat([dec_input, next_token], dim=1)
+                _, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+
+            # Backpropagation
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+        
+        # Epoch time and loss
+        epoch_time = time.time() - t0
+        epoch_loss /= num_batch
+        loss_traj.append(epoch_loss)
+        
+        print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds, Loss = {epoch_loss:.6f}")
+        
+        # Optionally save checkpoints
+        if checkpoint_suffix is not None and (epoch + 1) % 10 == 0:
+            with open('./Loss_log_' + checkpoint_suffix + '.p', 'wb') as f:
+                pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
+            torch.save(model, './Models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch) + '-autoreg-'+'iter.p')
+
+        # Shuffle dataset at the end of each epoch
+        shuffle_idx = torch.randperm(dataset.shape[0])
+        dataset = dataset[shuffle_idx, :, :]
+
+    print(f"Final Epoch: Loss = {epoch_loss:.6f}")
+    return model, loss_traj
         
 def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0, selected_indices=None):
     

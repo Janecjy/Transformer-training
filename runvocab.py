@@ -1,6 +1,6 @@
 import torch
 from models import Seq2SeqWithEmbeddingmodClass, Seq2SeqWithEmbeddingmodClassMoreEmbedding
-from utils import train_model, train_model_vocab#, train_model_reweighted2, train_model_reweighted3
+from utils import train_model, train_model_vocab, train_model_vocab_autoreg#, train_model_reweighted2, train_model_reweighted3
 import pickle
 import argparse
 import numpy as np
@@ -36,6 +36,8 @@ parser.add_argument('--SelectedIndices', '-SI', help='Comma-separated list of in
 parser.add_argument('--LossWeight', '-LW', help='Weight for the loss function', type=parse_indices, default="1,1,1,1,1,1,1,1,1,1,1,1,1")
 parser.add_argument('--Alpha', '-A', help='Alpha for the reweighted loss function', type=float, default=0.0)
 parser.add_argument('--MoreEmbedding', '-ME', help='Whether to use more embedding layers', type=str2bool, default=False)
+parser.add_argument('--PredictionLength', '-PL', help='Length of prediction', type=int, default=32)
+parser.add_argument('--ContextLength', '-CL', help='Length of context', type=int, default=32)
 args = parser.parse_args()
 dataset_name = args.Dataset 
 gpu = args.GPUNumber
@@ -65,8 +67,8 @@ print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024*2
 NUM_EPOCHS = 1000
-CONTEXT_LENGTH = 32
-PREDICTION_LENGTH = 32
+CONTEXT_LENGTH = args.ContextLength
+PREDICTION_LENGTH = args.PredictionLength
 
 with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
@@ -105,6 +107,7 @@ print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 opt = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(adam_beta1, adam_beta2))
 train_dataset = train_dataset.to(DEVICE)
+print(train_dataset.shape)
 
 # # trained_model, loss_traj = train_model(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=2000, device=DEVICE, checkpoint_suffix=save_name)
 if not weighted:

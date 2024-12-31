@@ -4,10 +4,11 @@ import numpy as np
 import time
 
 # Load the dataset
-dataset_name = 'FullDataset10x-filtered1-more'
+dataset_name = 'FullDataset_alt1x'
 with open('NEWDatasets/'+dataset_name+'.p', 'rb') as f:
     d = pickle.load(f)
 train_dataset = d['data']
+print(train_dataset.shape)
 N = d['normalizer'].detach().cpu().numpy()  # Load normalizer
 
 # The bucket boundaries for each feature index

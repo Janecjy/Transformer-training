@@ -4,25 +4,24 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 # Load the dataset
-with open('NEWDatasets/FullDataset1x-filtered1-more-bucketized.p', 'rb') as f:
+with open('NEWDatasets/FullDataset_alt1x-bucketized.p', 'rb') as f:
     dataset_1x = pickle.load(f)
-with open('NEWDatasets/FullDataset10x-filtered1-more-bucketized.p', 'rb') as f:
-    dataset_10x = pickle.load(f)
 
 # Get the data tensor (shape: [93886, 64, 44])
-data = torch.cat((dataset_1x, dataset_10x), dim=0)
+#data = torch.cat((dataset_1x, dataset_10x), dim=0)
+data = dataset_1x
 
 # del dataset_1x, dataset_10x
 # torch.cuda.empty_cache()
 
-# # Split into train and test sets (8:2 ratio)
-# train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
+# Split into train and test sets (8:2 ratio)
+train_data, test_data = train_test_split(data, test_size=0.2, random_state=42)
 
-# # Save train and test sets incrementally
-# with open('NEWDatasets/FullDataset-filtered1-bucketized-train.p', 'wb') as f_train:
-#     pickle.dump(train_data, f_train, protocol=pickle.HIGHEST_PROTOCOL)
-# with open('NEWDatasets/FullDataset-filtered1-bucketized-test.p', 'wb') as f_test:
-#     pickle.dump(test_data, f_test, protocol=pickle.HIGHEST_PROTOCOL)
+# Save train and test sets incrementally
+with open('NEWDatasets/FullDataset_alt-bucketized-train.p', 'wb') as f_train:
+    pickle.dump(train_data, f_train, protocol=pickle.HIGHEST_PROTOCOL)
+with open('NEWDatasets/FullDataset_alt-bucketized-test.p', 'wb') as f_test:
+    pickle.dump(test_data, f_test, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Incremental vocabulary creation to avoid memory issues
 unique_vectors = set()
@@ -38,7 +37,14 @@ torch.cuda.empty_cache()
 vocab_dict = {vector: idx for idx, vector in enumerate(unique_vectors)}
 
 # Save the vocabulary dictionary
-with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'wb') as f_vocab:
+with open('NEWDatasets/FullDataset_alt-bucketized-VocabDict.p', 'wb') as f_vocab:
     pickle.dump(vocab_dict, f_vocab, protocol=pickle.HIGHEST_PROTOCOL)
+
+with open('NEWDatasets/FullDataset_alt-bucketized-VocabDict.p', 'rb') as f_vocab:
+    vocab_dict = pickle.load(f_vocab)
+
+vocab_back_dict = {v: k for k, v in vocab_dict.items()}
+with open("NEWDatasets/FullDataset_alt-bucketized-VocabBackDict.p", "wb") as f:
+    pickle.dump(vocab_back_dict, f)
 
 print("Train/Test sets and vocabulary dictionary created successfully!")
