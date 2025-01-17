@@ -65,7 +65,7 @@ gc.collect()
 # DEVICE = torch.device("cpu")
 print(DEVICE)
 PAD_IDX = 2
-BATCH_SIZE = 1024*2
+BATCH_SIZE = 1024
 NUM_EPOCHS = 1000
 CONTEXT_LENGTH = args.ContextLength
 PREDICTION_LENGTH = args.PredictionLength
@@ -74,12 +74,13 @@ with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
     # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
+train_dataset = train_dataset[:80000, :, :]
 
 # with open('NEWDatasets/FullDataset.p', 'rb') as f:
 #     d = pickle.load(f)
 # N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
-with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
+with open('NEWDatasets/FullDataset_alt-bucketized-VocabDict.p', 'rb') as f_vocab:
         vocab_dict = pickle.load(f_vocab)
         num_classes = len(vocab_dict)
         print("vocab dict size: ", num_classes)
@@ -105,13 +106,14 @@ else:
 
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
+torch.cuda.empty_cache()
 opt = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(adam_beta1, adam_beta2))
 train_dataset = train_dataset.to(DEVICE)
 print(train_dataset.shape)
 
 # # trained_model, loss_traj = train_model(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=2000, device=DEVICE, checkpoint_suffix=save_name)
 if not weighted:
-    train_model_vocab(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, num_classes=num_classes, vocab_dict=vocab_dict)
+    train_model_vocab_autoreg(model, train_dataset, opt, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, num_classes=num_classes, vocab_dict=vocab_dict)
 else:
     weights = np.ones(PREDICTION_LENGTH)
     # weights[0:9] = np.arange(1,10,1)[::-1]

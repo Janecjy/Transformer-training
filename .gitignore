@@ -9,3 +9,4 @@ Loss*
 .DS_Store
 scratch/
 venv/
+*.zip

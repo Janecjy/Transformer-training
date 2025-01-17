@@ -92,8 +92,8 @@ def form_dataset_mod(filelist, context_len, prediction_len, input_dim=13):
     return mod_data, global_max
 
 # out-of-distribution 
-params_list_alt = [('Cubic', 0.5, 0.4, 'car'), ('Cubic', 0.8, 0.8, 'tram')]
-params_list = [('Cubic', 0.7, 0.4, 'bus'), ('Cubic', 0.5, 0.8, 'ferry')]
+params_list_alt = [('Reno', 1, 2, 'ferry'), ('Reno', 5, 3, 'metro'), ('Reno', 2, 2, 'bus'), ('Reno', 1.5, 2, 'train'), ('Cubic', 0.9, 0.4, 'bus'), ('Cubic', 0.7, 0.8, 'metro'), ('Cubic', 0.5, 0.4, 'car'), ('Cubic', 0.8, 0.8, 'tram')]
+params_list = [('Reno', 1, 4, 'metro'), ('Reno', 5, 1.5, 'ferry'), ('Reno', 2, 4, 'car'), ('Reno', 1.5, 4, 'tram'), ('Cubic', 0.9, 0.8, 'car'), ('Cubic', 0.8, 0.4, 'train'), ('Cubic', 0.7, 0.4, 'bus'), ('Cubic', 0.5, 0.8, 'ferry')]
 
 filelist = []
 
