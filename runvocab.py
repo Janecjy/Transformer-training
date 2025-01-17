@@ -65,11 +65,12 @@ print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024*2
 NUM_EPOCHS = 1000
-CONTEXT_LENGTH = 32
-PREDICTION_LENGTH = 32
+CONTEXT_LENGTH = 10
+PREDICTION_LENGTH = 10
 
-with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
-    train_dataset = pickle.load(f)
+with open('./NEWDatasets/ccbench-dataset-preprocessed/'+dataset_name+'-train.p', 'rb') as f:
+    train_dataset_np = pickle.load(f)
+    train_dataset = torch.from_numpy(train_dataset_np)
     # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
 
@@ -77,10 +78,10 @@ with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
 #     d = pickle.load(f)
 # N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
-with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
-        vocab_dict = pickle.load(f_vocab)
-        num_classes = len(vocab_dict)
-        print("vocab dict size: ", num_classes)
+with open('./NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+    vocab_dict = pickle.load(f_vocab)
+    num_classes = len(vocab_dict)
+    print("vocab dict size: ", num_classes)
     
 if more_embedding:
     model = Seq2SeqWithEmbeddingmodClassMoreEmbedding(num_encoder_layers=num_encoder_layers,

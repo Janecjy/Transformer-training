@@ -478,10 +478,13 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
             batch_classes = []
             for i in range(batch_size):
                 for t in range(prediction_len):
-                    vector = tuple(expected_output[i, t, :].tolist())
-                    class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
+                    # vector = tuple(expected_output[i, t, :].tolist())
+                    base_rtt_val = expected_output[i, t, 0]  # continuous float
+                    discrete_features = tuple(expected_output[i, t, 1:].tolist())  # 5D
+                    class_idx = vocab_dict.get(discrete_features, -1)
+                    # class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
                     if class_idx == -1:
-                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                        raise ValueError(f"Vector not found in vocab_dict: {discrete_features}")
                     batch_classes.append(class_idx)
 
             # Convert to tensor and move to device
