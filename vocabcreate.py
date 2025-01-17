@@ -46,4 +46,11 @@ vocab_dict = {vec: idx for idx, vec in enumerate(unique_vectors)}
 with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'wb') as f_vocab:
     pickle.dump(vocab_dict, f_vocab, protocol=pickle.HIGHEST_PROTOCOL)
 
+
+vocab_back_dict = {idx: vec for idx, vec in enumerate(unique_vectors)}
+
+with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabBackDict.p', 'wb') as f_vocab_back:
+    pickle.dump(vocab_back_dict, f_vocab_back, protocol=pickle.HIGHEST_PROTOCOL)
+    
+
 print("Vocabulary dictionary created successfully (excluding base RTT)!")

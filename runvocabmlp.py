@@ -10,14 +10,14 @@ import time
 from utils import test_model_batched, test_model, weighted_mse
 
 #CONSTANTS
-DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-# DEVICE = "cpu"
+# DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+DEVICE = "cpu"
 print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024
-NUM_EPOCHS = 250
-CONTEXT_LENGTH = 32
-PREDICTION_LENGTH = 32
+NUM_EPOCHS = 1000
+CONTEXT_LENGTH = 10
+PREDICTION_LENGTH = 10
 
 def train_linear_model(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None):
     loss_func = torch.nn.MSELoss(reduction='sum')
@@ -76,10 +76,14 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
             batch_classes = []
             for i in range(batch_size):
                 for t in range(prediction_len):
-                    vector = tuple(expected_output[i, t, :].tolist())
-                    class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
+                    base_rtt_val = expected_output[i, t, 0]  # continuous float
+                    discrete_features = tuple(expected_output[i, t, 1:].tolist())  # 5D
+                    class_idx = vocab_dict.get(discrete_features, -1)
+
+                    # vector = tuple(expected_output[i, t, :].tolist())
+                    # class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
                     if class_idx == -1:
-                        raise ValueError(f"Vector not found in vocab_dict: {vector}")
+                        raise ValueError(f"Vector not found in vocab_dict: {discrete_features}")
                     batch_classes.append(class_idx)
 
             # Convert to tensor and move to device
@@ -387,13 +391,14 @@ class MLP(nn.Module):
         return x
 
 
-with open('NEWDatasets/FullDataset-filtered1-bucketized-VocabDict.p', 'rb') as f_vocab:
+with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
         vocab_dict = pickle.load(f_vocab)
         num_classes = len(vocab_dict)
         print("vocab dict size: ", num_classes)
 
-with open('NEWDatasets/FullDataset-filtered1-bucketized-train.p', 'rb') as f:
-    train_dataset = pickle.load(f)
+with open('NEWDatasets/ccbench-dataset-preprocessed/6col-rtt-based-train.p', 'rb') as f:
+    train_dataset_np = pickle.load(f)
+    train_dataset = torch.from_numpy(train_dataset_np)
 model = MLP(input_dim=CONTEXT_LENGTH*train_dataset.shape[-1], output_dim=CONTEXT_LENGTH*num_classes, hidden_dim=102).to(DEVICE)
 print("input dim: ", CONTEXT_LENGTH*train_dataset.shape[-1])
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
