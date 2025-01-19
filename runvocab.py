@@ -65,7 +65,7 @@ gc.collect()
 # DEVICE = torch.device("cpu")
 print(DEVICE)
 PAD_IDX = 2
-BATCH_SIZE = 1024
+BATCH_SIZE = 1024 * 2
 NUM_EPOCHS = 1000
 CONTEXT_LENGTH = args.ContextLength
 PREDICTION_LENGTH = args.PredictionLength
@@ -74,7 +74,6 @@ with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
     # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
-train_dataset = train_dataset[:80000, :, :]
 
 # with open('NEWDatasets/FullDataset.p', 'rb') as f:
 #     d = pickle.load(f)
@@ -107,6 +106,7 @@ else:
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
 torch.cuda.empty_cache()
+gc.collect()
 opt = torch.optim.Adam(model.parameters(), lr=learning_rate, betas=(adam_beta1, adam_beta2))
 train_dataset = train_dataset.to(DEVICE)
 print(train_dataset.shape)

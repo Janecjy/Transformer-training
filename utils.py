@@ -9,7 +9,7 @@ import copy
 
 #CONSTANTS
 PAD_IDX = 2
-BATCH_SIZE = 256
+BATCH_SIZE = 1024
 NUM_EPOCHS = 250
 CONTEXT_LENGTH = 32
 PREDICTION_LENGTH = 32
@@ -607,6 +607,7 @@ def train_model_vocab_autoreg(model, dataset, optimizer, prediction_len, device,
                 model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
                 #model_out = model_out.view(batch_size, prediction_len, -1)
                 logits = model_out[:, -1, :]
+                loss += loss_func(logits, batch_classes[:, i])
                 # print("logits.shape: ", logits.shape)
                 # Cross-entropy loss for step i
                 # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
@@ -622,7 +623,6 @@ def train_model_vocab_autoreg(model, dataset, optimizer, prediction_len, device,
                 dec_input = torch.cat([dec_input, torch.softmax(logits[:, np.newaxis, :78], dim=2)], dim=1)
                 _, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
 
-            loss += loss_func(logits, batch_classes[:, i])
             # Backpropagation
             loss.backward()
             optimizer.step()
