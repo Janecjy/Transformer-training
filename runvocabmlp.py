@@ -10,8 +10,8 @@ import time
 from utils import test_model_batched, test_model, weighted_mse
 
 #CONSTANTS
-# DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-DEVICE = "cpu"
+DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# DEVICE = "cpu"
 print(DEVICE)
 PAD_IDX = 2
 BATCH_SIZE = 1024
