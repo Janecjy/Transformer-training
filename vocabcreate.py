@@ -5,17 +5,17 @@ import numpy as np
 # ----------------------
 # 1) LOAD THE DATA
 # ----------------------
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-rtt-based-test.p', 'rb') as f:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-test.p', 'rb') as f:
     rtt_based_test = pickle.load(f)
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-rtt-based-train.p', 'rb') as f:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-train.p', 'rb') as f:
     rtt_based_train = pickle.load(f)
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-time-based-test.p', 'rb') as f:
-    time_based_test = pickle.load(f)
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-time-based-train.p', 'rb') as f:
-    time_based_train = pickle.load(f)
+# with open('NEWDatasets/ccbench-dataset-preprocessed/6col-time-based-test.p', 'rb') as f:
+#     time_based_test = pickle.load(f)
+# with open('NEWDatasets/ccbench-dataset-preprocessed/6col-time-based-train.p', 'rb') as f:
+#     time_based_train = pickle.load(f)
 
 # Concatenate all data along the first (sample) dimension
-data = np.concatenate((rtt_based_test, rtt_based_train, time_based_test, time_based_train), axis=0)
+data = np.concatenate((rtt_based_test, rtt_based_train), axis=0)#, time_based_test, time_based_train), axis=0)
 print("Combined data shape:", data.shape)
 # If shape is (N, T, 6), then data[i, j, :] is (6,).
 
@@ -43,13 +43,13 @@ torch.cuda.empty_cache()
 # ----------------------
 vocab_dict = {vec: idx for idx, vec in enumerate(unique_vectors)}
 
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'wb') as f_vocab:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'wb') as f_vocab:
     pickle.dump(vocab_dict, f_vocab, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 vocab_back_dict = {idx: vec for idx, vec in enumerate(unique_vectors)}
 
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabBackDict.p', 'wb') as f_vocab_back:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-VocabBackDict.p', 'wb') as f_vocab_back:
     pickle.dump(vocab_back_dict, f_vocab_back, protocol=pickle.HIGHEST_PROTOCOL)
     
 

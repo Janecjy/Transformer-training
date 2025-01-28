@@ -7,10 +7,11 @@ import torch
 import torch.nn as nn
 import pickle
 import time
+import argparse
 from utils import test_model_batched, test_model, weighted_mse
 
 #CONSTANTS
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 # DEVICE = "cpu"
 print(DEVICE)
 PAD_IDX = 2
@@ -124,9 +125,9 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
         loss_traj += [epoch_loss]
         
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds")
-        if (epoch+1)%10 == 0:
+        if (epoch+1)%100 == 0:
             print(f"Epoch loss = {epoch_loss:.6f}")
-            torch.save(model, './Models/MLP-MS-Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
+            torch.save(model, '/datastor1/janec/Models/MLP-MS-Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
         if epoch == num_epochs-1:
             print(f"Final Epoch: Loss = {epoch_loss:.6f}")
         shuffle_idx = torch.randperm(dataset.shape[0])
@@ -390,21 +391,26 @@ class MLP(nn.Module):
         x = self.mlp(x)
         return x
 
+parser = argparse.ArgumentParser(description="Train an MLP model with a configurable hidden dimension.")
+parser.add_argument('--hidden_dim', type=int, default=102, 
+                    help='Hidden dimension size for the MLP. Defaults to 102.')
+args = parser.parse_args()
 
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
         vocab_dict = pickle.load(f_vocab)
         num_classes = len(vocab_dict)
         print("vocab dict size: ", num_classes)
 
-with open('NEWDatasets/ccbench-dataset-preprocessed/6col-rtt-based-train.p', 'rb') as f:
+with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-train.p', 'rb') as f:
     train_dataset_np = pickle.load(f)
     train_dataset = torch.from_numpy(train_dataset_np)
-model = MLP(input_dim=CONTEXT_LENGTH*train_dataset.shape[-1], output_dim=CONTEXT_LENGTH*num_classes, hidden_dim=102).to(DEVICE)
+model = MLP(input_dim=CONTEXT_LENGTH*train_dataset.shape[-1], output_dim=CONTEXT_LENGTH*num_classes, hidden_dim=args.hidden_dim).to(DEVICE)
 print("input dim: ", CONTEXT_LENGTH*train_dataset.shape[-1])
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 train_dataset = train_dataset.to(DEVICE)
+save_name = 'MLP-MS-norm-{}dim-noweighting-vocab'.format(args.hidden_dim)
 
 opt = torch.optim.Adam(model.parameters(), lr=1e-4)
-trained_model, loss_traj = train_mlp(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, vocab_dict=vocab_dict)
+trained_model, loss_traj = train_mlp(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, checkpoint_suffix=str(args.hidden_dim), vocab_dict=vocab_dict)
 
-torch.save(trained_model, './Models/MLP-MS-norm-102dim-noweighting-vocab-1000iter.p')
+torch.save(trained_model, '/datastor1/janec/Models/{}-1000iter.p'.format(save_name))

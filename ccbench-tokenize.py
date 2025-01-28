@@ -10,6 +10,8 @@ with open(dataset_path, "rb") as f:
     ccbench_dataset = pickle.load(f)  # Expect shape (N, 20, 6)
 genet_data1 = np.load('NEWDatasets/genet-dataset-raw/tcp_metrics.npy')
 genet_data2 = np.load('NEWDatasets/genet-dataset-raw/tcp_metrics_trace_file_2.npy')
+genet_data3 = np.load('NEWDatasets/genet-dataset-raw/tcp_metrics_reno_trace_file_1.npy')
+genet_data4 = np.load('NEWDatasets/genet-dataset-raw/tcp_metrics_reno_trace_file_2.npy')
 
 # --- Function to reshape data to (M, 20, 6) and ignore leftover rows ---
 def reshape_2d_to_3d_20(data_2d):
@@ -31,12 +33,16 @@ def reshape_2d_to_3d_20(data_2d):
 # --- Apply the reshape function to both genet_data1 and genet_data2 ---
 genet_data1_3d = reshape_2d_to_3d_20(genet_data1)
 genet_data2_3d = reshape_2d_to_3d_20(genet_data2)
+genet_data3_3d = reshape_2d_to_3d_20(genet_data3)
+genet_data4_3d = reshape_2d_to_3d_20(genet_data4)
 
 print("\nReshaped shapes:")
 print("genet_data1_3d:", genet_data1_3d.shape)
 print("genet_data2_3d:", genet_data2_3d.shape)
+print("genet_data3_3d:", genet_data3_3d.shape)
+print("genet_data4_3d:", genet_data4_3d.shape)
 
-combined_data = np.vstack([genet_data1_3d, genet_data2_3d, ccbench_dataset])
+combined_data = np.vstack([genet_data1_3d, genet_data2_3d, genet_data3_3d, genet_data4_3d, ccbench_dataset])
 print("combined_data shape:", combined_data.shape)
 
 # print("Loaded dataset shape:", dataset.shape)  # (N, 20, 6)
@@ -48,7 +54,7 @@ print("combined_data shape:", combined_data.shape)
 # Feature 0 = baseRTT (normalize)
 # Features 1..5 = other metrics (bucketize)
 
-bucket_boundaries_ccbench = {
+bucket_boundaries_combined = {
     1: [0.12, 0.2, 0.28, 0.43, 0.55, 0.83, 1.03, 1.29, 1.63, 2.12, 3.64, 4.02, 5.74, 8, 12, 14],
     2: [0.01, 0.3, 0.38, 0.44, 0.49, 0.54, 0.6, 0.68, 0.84, 1.41, 3, 5, 205, 395, 1206],
     3: [0.01, 0.08, 0.11, 0.15, 0.23, 0.45, 0.8, 0.9, 1, 1.75],
@@ -86,7 +92,7 @@ bin_offsets = {}
 running_offset = 0
 
 for feat_idx in feature_ids:
-    boundaries = bucket_boundaries_ccbench[feat_idx]
+    boundaries = bucket_boundaries_combined[feat_idx]
     # number of bins = len(boundaries) + 1
     bin_offsets[feat_idx] = running_offset
     running_offset += (len(boundaries) + 1)
@@ -99,7 +105,7 @@ def bucketize_with_offset(values_1d, boundaries, offset):
 
 for feat_idx in feature_ids:
     col_vals = combined_data[..., feat_idx].reshape(-1)
-    boundaries = bucket_boundaries_ccbench[feat_idx]
+    boundaries = bucket_boundaries_combined[feat_idx]
     offset = bin_offsets[feat_idx]
     discrete_bins = bucketize_with_offset(col_vals, boundaries, offset)
     combined_data[..., feat_idx] = discrete_bins.reshape(N, T)

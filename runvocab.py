@@ -36,6 +36,7 @@ parser.add_argument('--SelectedIndices', '-SI', help='Comma-separated list of in
 parser.add_argument('--LossWeight', '-LW', help='Weight for the loss function', type=parse_indices, default="1,1,1,1,1,1,1,1,1,1,1,1,1")
 parser.add_argument('--Alpha', '-A', help='Alpha for the reweighted loss function', type=float, default=0.0)
 parser.add_argument('--MoreEmbedding', '-ME', help='Whether to use more embedding layers', type=str2bool, default=False)
+parser.add_argument('--ModelName', '-M', help='Name of the model', type=str, default='BaseTransformer3')
 args = parser.parse_args()
 dataset_name = args.Dataset 
 gpu = args.GPUNumber
@@ -52,7 +53,8 @@ adam_beta2 = args.AdamBeta2
 selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
 alpha = args.Alpha
-save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_vocab"
+add_name = args.ModelName
+save_name = add_name+"_Transformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)
 more_embedding = args.MoreEmbedding
 
 #CONSTANTS
@@ -68,7 +70,7 @@ NUM_EPOCHS = 1000
 CONTEXT_LENGTH = 10
 PREDICTION_LENGTH = 10
 
-with open('./NEWDatasets/ccbench-dataset-preprocessed/'+dataset_name+'-train.p', 'rb') as f:
+with open('./NEWDatasets/combined-dataset-preprocessed/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset_np = pickle.load(f)
     train_dataset = torch.from_numpy(train_dataset_np)
     # train_dataset = train_dataset[:, :, selected_indices]
@@ -78,7 +80,7 @@ with open('./NEWDatasets/ccbench-dataset-preprocessed/'+dataset_name+'-train.p',
 #     d = pickle.load(f)
 # N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
-with open('./NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('./NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     vocab_dict = pickle.load(f_vocab)
     num_classes = len(vocab_dict)
     print("vocab dict size: ", num_classes)
