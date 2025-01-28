@@ -601,19 +601,6 @@ model_name_list = [rtt_model_name]#, time_model_name]
 is_transformer_list = [True, True]
 with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-test.p', 'rb') as f:
     rtt_test_dataset = pickle.load(f)
-# with open('NEWDatasets/ccbench-dataset-preprocessed/6col-time-based-test.p', 'rb') as f:
-#     time_test_dataset = pickle.load(f)
-# Assuming the test dataset is loaded in `test_dataset`
 prediction_len = 10
-# test_model_accuracy(model_list, model_name_list, is_transformer_list, test_dataset, vocab_dict, prediction_len=prediction_len, batch_size=32, device='cpu')
 test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, [rtt_test_dataset], vocab_dict, prediction_len, batch_size=32, vocab_size=3231, iteration=ITER)
-# plot_predictions_for_sample(model, test_dataset, vocab_dict, prediction_len=prediction_len, sample_idx=0, device=DEVICE)
-# test_and_plot_distribution(model, test_dataset, vocab_dict, prediction_len=32, batch_size=32, vocab_size=3231, iteration=ITER)
-# process_and_calculate_distances()
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-true_values.p', 'rb') as f_true:
-#     true_values = pickle.load(f_true)
-# with open('NEWDatasets/FullDataset1x-filtered1-bucketized-predicted_values.p', 'rb') as f_pred:
-#     predicted_values = pickle.load(f_pred)
-# process_and_calculate_distances(true_values, predicted_values, bucket_boundaries_1x)
-# process_and_calculate_distances_multiple_models(bucket_boundaries_1x)
 
