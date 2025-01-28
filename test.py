@@ -586,21 +586,23 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     vocab_dict = pickle.load(f_vocab)
 
-# transformer_model_small_name = 'BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter'
-# transformer_model_small = torch.load('Models/Checkpoint-'+transformer_model_small_name+'.p', map_location=DEVICE)
-# transformer_model_large_name = 'BaseTransformer3_256_10_10_256_8_lr_1e-05_vocab-'+str(ITER)+'iter'
-# transformer_model_large = torch.load('Models/Checkpoint-'+transformer_model_large_name+'.p', map_location=DEVICE)
+transformer_model_small_name = 'BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter'
+transformer_model_small = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
+transformer_model_large_name = 'BaseTransformer3_256_10_10_256_8_lr_1e-05_vocab-'+str(ITER)+'iter'
+transformer_model_large = torch.load('/datastor1/janec/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
 # mlp_model_name = 'MLP-MS-Checkpoint-102-'+str(ITER)+'iter'
 # mlp_model = torch.load('Models/'+mlp_model_name+'.p', map_location=DEVICE)
-rtt_model_name = 'RTT-Transformer_64_5_5_16_4_lr_1e-05_999iter'
-rtt_model = torch.load('/datastor1/janec/combined-dataset-model/Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-999iter.p', map_location=DEVICE)
+# rtt_model_name = 'RTT-Transformer_64_5_5_16_4_lr_1e-05_999iter'
+# rtt_model = torch.load('/datastor1/janec/combined-dataset-model/Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-999iter.p', map_location=DEVICE)
 # time_model_name = 'Time-Transformer_64_5_5_16_4_lr_1e-05_'+str(ITER)+'iter'
 # time_model = torch.load('Models/Time-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter.p', map_location=DEVICE)
-model_list = [rtt_model]#, time_model]
-model_name_list = [rtt_model_name]#, time_model_name]
+# model_list = [rtt_model]#, time_model]
+# model_name_list = [rtt_model_name]#, time_model_name]
+model_list = [transformer_model_small, transformer_model_large]#, mlp_model]
+model_name_list = [transformer_model_small_name, transformer_model_large_name]#, mlp_model_name]
 is_transformer_list = [True, True]
 with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-test.p', 'rb') as f:
     rtt_test_dataset = pickle.load(f)
 prediction_len = 10
-test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, [rtt_test_dataset], vocab_dict, prediction_len, batch_size=32, vocab_size=3231, iteration=ITER)
+test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, [rtt_test_dataset, rtt_test_dataset], vocab_dict, prediction_len, batch_size=32, vocab_size=3231, iteration=ITER)
 

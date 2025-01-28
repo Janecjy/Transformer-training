@@ -202,8 +202,8 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
     plt.xlabel('Average Bucket Index Distance', fontsize=20)
     plt.ylabel('CDF', fontsize=20)
     # plt.xlim([0, 4])
-    plt.xlim([2, 9])
-    plt.ylim([99.4, 100])
+    # plt.xlim([2, 9])
+    # plt.ylim([99.4, 100])
     # plt.xticks([0, 1, 2, 3, 4], fontsize=18)
     plt.xticks( fontsize=18)
     plt.yticks(fontsize=18)
@@ -212,7 +212,7 @@ def test_and_plot_distribution_multi_model(model_list, model_name_list, is_trans
 
     # Reduce whitespace and save the plot
     plt.tight_layout(pad=1.0)
-    plt.savefig(f'feature_num_bucket_distance_comparison_CDF_tail_zoom.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'feature_num_bucket_distance_comparison_CDF.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -311,7 +311,7 @@ with open('/u/janechen/Documents/Transformer-training-fewer-features/NEWDatasets
 few_feature_model_name = 'Transformer with 3 Features'
 few_feature_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_3col_Transformer3_32_3_3_8_2_lr_1e-05-999iter.p', map_location=DEVICE)
 regular_feature_model_name = 'Transformer with 6 Features'
-regular_feature_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
+regular_feature_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
 model_list = [few_feature_model, regular_feature_model]
 model_name_list = [few_feature_model_name, regular_feature_model_name]
 is_transformer_list = [True, True]
