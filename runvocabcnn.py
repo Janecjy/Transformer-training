@@ -9,7 +9,7 @@ import pickle
 import time
 import argparse
 
-DEVICE = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+DEVICE = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
 # DEVICE = "cpu"
 print(DEVICE)
 BATCH_SIZE = 1024
@@ -35,13 +35,23 @@ class CNN(nn.Module):
         x = self.softmax(x)  # Softmax over output dimension
         return x  # Shape: [batch_size, seq_len, output_dim]
 
-def train_cnn(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, vocab_dict=None):
+def train_cnn(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, vocab_dict=None, checkpoint_path=None, resume_from_epoch=0):
     loss_func = nn.CrossEntropyLoss()
     loss_traj = []
     model.train()
     num_batch = dataset.shape[0] // batch_size
 
-    for epoch in range(num_epochs):
+    if checkpoint_path and resume_from_epoch > 0:
+        checkpoint_file = os.path.join(checkpoint_path, "CNN-"+checkpoint_suffix+"-epoch"+str(resume_from_epoch)+".pth")
+        if os.path.exists(checkpoint_file):
+            print(f"[info] Loading checkpoint from: {checkpoint_file}")
+            model = torch.load(checkpoint_file, map_location=device)
+            print(f"[info] Resumed training from epoch {resume_from_epoch}")
+        else:
+            print(f"[warning] Checkpoint file not found: {checkpoint_file}. Starting from scratch.")
+
+    # Training loop
+    for epoch in range(resume_from_epoch, num_epochs):
         epoch_loss = 0.0
         t0 = time.time()
 
@@ -112,6 +122,8 @@ def train_cnn(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
 parser = argparse.ArgumentParser(description="Train a CNN model with configurable parameters.")
 parser.add_argument('--num_channels', type=int, default=256, 
                     help='Number of output channels for convolution layers. Defaults to 128.')
+parser.add_argument('--checkpoint_path', type=str, help="Path to save/load model checkpoints")
+parser.add_argument('--resume_from_epoch', type=int, default=0, help="Epoch to resume training from (if applicable)")
 args = parser.parse_args()
 
 with open('NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
@@ -129,6 +141,6 @@ train_dataset = train_dataset.to(DEVICE)
 save_name = 'CNN-{}channels-noweighting-vocab'.format(args.num_channels)
 
 opt = torch.optim.Adam(model.parameters(), lr=1e-4)
-trained_model, loss_traj = train_cnn(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, checkpoint_suffix=str(args.num_channels), vocab_dict=vocab_dict)
+trained_model, loss_traj = train_cnn(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, checkpoint_suffix=str(args.num_channels), vocab_dict=vocab_dict, checkpoint_path=args.checkpoint_path, resume_from_epoch=args.resume_from_epoch)
 
 torch.save(trained_model, '/datastor1/janec/Models/{}-1000iter.p'.format(save_name))
