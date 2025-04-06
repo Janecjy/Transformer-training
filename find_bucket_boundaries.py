@@ -14,7 +14,12 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import silhouette_score
 
 DATASET_DIR = "/datastor1/janec/datasets"
-BOUNDARY_SAVE_PATH = "/datastor1/janec/datasets/bucket_boundaries.pkl"
+COMBINED_DIR = "/datastor1/janec/datasets/combined"
+BOUNDARY_DIR = "/datastor1/janec/datasets/boundaries"
+
+TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-train.p")
+TEST_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-test.p")
+
 FEATURE_DIM = 6
 
 ###############################################
@@ -28,12 +33,12 @@ def collect_feature_values(files):
     feature_values = [[] for _ in range(FEATURE_DIM)]
     for f in files:
         with open(f, 'rb') as handle:
-            data = pickle.load(handle)  # shape: (N, 20, 6)
-            if len(data.shape) != 3 or data.shape[1] < 10 or data.shape[2] != FEATURE_DIM:
+            data = pickle.load(handle)  # shape: (N, 20, 6) expected
+            if not isinstance(data, np.ndarray) or len(data.shape) != 3 or data.shape[2] != FEATURE_DIM:
                 continue
 
+            # Flatten all 20 RTTs for each sample
             for i in range(FEATURE_DIM):
-                # Flatten the array to 1D
                 vals = data[:, :, i].flatten()
                 feature_values[i].extend(vals)
     return feature_values
@@ -85,8 +90,6 @@ def get_freedman_diaconis_boundaries(arr):
 ###############################################
 #      K-Means: 1) Find Optimal K, 2) Boundaries
 ###############################################
-from sklearn.cluster import KMeans
-
 def find_optimal_k_elbow_silhouette(data, max_k=10):
     """
     data: 1D or 2D NumPy array of shape (N, 1) or (N, D).
@@ -117,22 +120,22 @@ def find_optimal_k_elbow_silhouette(data, max_k=10):
     elbow_idx = np.argmax(diffs) 
     best_k_elbow = ks[elbow_idx]
 
-    # Optional: plot them if you'd like
+    # Example: you can show plots here if desired
     plt.figure()
     plt.plot(ks, inertia_values, marker='o')
     plt.title("Elbow Method (Inertia)")
     plt.xlabel("k")
     plt.ylabel("Inertia")
-    plt.show()
     plt.savefig("elbow_method.png")
+    plt.close()
 
     plt.figure()
     plt.plot(ks, silhouette_values, marker='o')
     plt.title("Silhouette Scores")
     plt.xlabel("k")
     plt.ylabel("Average Silhouette Score")
-    plt.show()
     plt.savefig("silhouette_scores.png")
+    plt.close()
 
     return best_k_elbow, best_k_sil
 
@@ -140,8 +143,6 @@ def get_kmeans_boundaries(arr, n_clusters):
     """
     1D k-means with n_clusters -> boundaries at midpoints between sorted cluster centers.
     """
-    if not SKLEARN_AVAILABLE:
-        raise RuntimeError("scikit-learn is not installed; cannot do K-means.")
     arr_reshaped = arr.reshape(-1, 1)
     kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(arr_reshaped)
     centers = np.sort(kmeans.cluster_centers_.flatten())
@@ -153,21 +154,20 @@ def get_kmeans_boundaries(arr, n_clusters):
         boundaries.append(midpoint)
     return boundaries
 
-
 ###############################################
 #            Compute Bucket Boundaries
 ###############################################
 def compute_bucket_boundaries(feature_values, method, num_buckets):
     """
     For each feature i, produce a list of boundary values based on chosen method.
-    If method == 'kmeans', we ignore num_buckets for final clusters
-      and pick best_k_sil for each feature from find_optimal_k_elbow_silhouette.
+    If method == 'kmeans', we pick best silhouette-based cluster count for each feature 
+    from find_optimal_k_elbow_silhouette.
     """
     boundaries = {}
     for i, values in enumerate(feature_values):
-        # Feature 1 is constant => skip
+        # If your Feature 1 is constant => optionally skip if you want:
         if i == 0:
-            # Skip feature 1 (base RTT)
+        #     boundaries[i] = []
             continue
 
         arr = np.array(values)
@@ -181,11 +181,10 @@ def compute_bucket_boundaries(feature_values, method, num_buckets):
         elif method == "histogram":
             edges = get_freedman_diaconis_boundaries(arr)
         elif method == "kmeans":
-            # Step 1: find best silhouette-based cluster count
-            #         with max_k = num_buckets
+            if not SKLEARN_AVAILABLE:
+                raise RuntimeError("scikit-learn is not installed; cannot do K-means.")
             arr_reshaped = arr.reshape(-1,1)
             _, best_k_sil = find_optimal_k_elbow_silhouette(arr_reshaped, max_k=num_buckets)
-            # Step 2: compute boundaries with that cluster count
             edges = get_kmeans_boundaries(arr, best_k_sil)
         else:
             raise ValueError(f"Unknown bucket method: {method}")
@@ -195,12 +194,73 @@ def compute_bucket_boundaries(feature_values, method, num_buckets):
     return boundaries
 
 ###############################################
+#         Train/Test Split Loading
+###############################################
+def load_or_create_train_test(dataset_dir):
+    """
+    Check if 6col-20rtt-train.p and 6col-20rtt-test.p exist in:
+      /datastor1/janec/datasets/combined/
+    If they do, return them.
+    Otherwise, gather from all .p files in dataset_dir,
+    randomly shuffle, do 80/20 split, and save them.
+    Returns list of file paths [train_file, test_file].
+    """
+    os.makedirs(COMBINED_DIR, exist_ok=True)
+    train_path = TRAIN_DATA_PATH
+    test_path = TEST_DATA_PATH
+
+    if os.path.exists(train_path) and os.path.exists(test_path):
+        print(f"Train/test files found:\n  {train_path}\n  {test_path}")
+        return [train_path, test_path]
+    else:
+        print("No existing train/test split found. Creating new split...")
+
+        all_pickle_files = glob(os.path.join(dataset_dir, "*.p"))
+        print(f"Found {len(all_pickle_files)} .p files in {dataset_dir}...")
+
+        # Collect all data into a single list of arrays
+        all_data_arrays = []
+        for f in all_pickle_files:
+            with open(f, 'rb') as handle:
+                data = pickle.load(handle)
+                # Expect (N, 20, 6)
+                if (
+                    isinstance(data, np.ndarray) 
+                    and len(data.shape) == 3 
+                    and data.shape[2] == FEATURE_DIM
+                ):
+                    all_data_arrays.append(data)
+        if not all_data_arrays:
+            print("No valid .p data found.")
+            return []
+
+        combined_data = np.concatenate(all_data_arrays, axis=0)  # shape (X, 20, 6)
+        print(f"Combined dataset shape: {combined_data.shape}")
+
+        # Shuffle
+        np.random.shuffle(combined_data)
+
+        # Split 80/20
+        cutoff = int(0.8 * len(combined_data))
+        train_data = combined_data[:cutoff]
+        test_data = combined_data[cutoff:]
+
+        with open(train_path, "wb") as f:
+            pickle.dump(train_data, f)
+        with open(test_path, "wb") as f:
+            pickle.dump(test_data, f)
+
+        print(f"Created train: {train_path} -> shape {train_data.shape}")
+        print(f"Created test : {test_path} -> shape {test_data.shape}")
+
+        return [train_path, test_path]
+
+###############################################
 #                     Main
 ###############################################
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Find bucket boundaries for first 10 RTT features")
+    parser = argparse.ArgumentParser(description="Find bucket boundaries for (N, 20, 6) data, with train/test split")
     parser.add_argument("--dataset-dir", default=DATASET_DIR, help="Path to directory of .p files")
-    parser.add_argument("--save-path", default=BOUNDARY_SAVE_PATH, help="Base path to save boundary pickle")
     parser.add_argument("--method", choices=["quantile","histogram","kmeans"], default="quantile",
                         help="Bucketization method to use")
     parser.add_argument("--num-buckets", type=int, default=1000,
@@ -208,29 +268,32 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Gather all .p files
-    all_pickle_files = glob(os.path.join(args.dataset_dir, "*.p"))
-    print(f"Found {len(all_pickle_files)} pickle files in {args.dataset_dir}.")
+    # 1) Load or create train/test .p files
+    split_files = load_or_create_train_test(args.dataset_dir)
+    if len(split_files) < 2:
+        print("No data to process. Exiting.")
+        exit(0)
 
-    # Collect feature values from first 10 RTTs
-    features = collect_feature_values(all_pickle_files)
+    # 2) Combine the train/test for boundary calculation 
+    #    (Alternatively, you can just read from train data to avoid leakage.)
+    data_files = split_files  # or [split_files[0]] if you want train-only
 
-    # Compute boundaries
-    bucket_boundaries = compute_bucket_boundaries(features, args.method, args.num_buckets)
+    # 3) Collect feature values
+    feature_values = collect_feature_values(data_files)
 
-    # Adjust final save path with method info
-    base, ext = os.path.splitext(args.save_path)
+    # 4) Compute boundaries
+    bucket_boundaries = compute_bucket_boundaries(feature_values, args.method, args.num_buckets)
+
+    # 5) Save boundaries under /datastore1/janec/datasets/boundaries
+    # os.makedirs(BOUNDARY_DIR, exist_ok=True)
+
+    # e.g. boundaries-quantile1000.pkl or boundaries-kmeans.pkl
     if args.method == "quantile":
-        # e.g., bucket_boundaries-quantile10.pkl
-        final_save_path = f"{base}-{args.method}{args.num_buckets}{ext}"
+        boundaries_filename = f"boundaries-{args.method}{args.num_buckets}.pkl"
     else:
-        # e.g., bucket_boundaries-kmeans.pkl or bucket_boundaries-histogram.pkl
-        final_save_path = f"{base}-{args.method}{ext}"
+        boundaries_filename = f"boundaries-{args.method}.pkl"
+    final_save_path = os.path.join(BOUNDARY_DIR, boundaries_filename)
 
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(final_save_path), exist_ok=True)
-
-    # Save boundaries
     with open(final_save_path, "wb") as f:
         pickle.dump(bucket_boundaries, f)
 
