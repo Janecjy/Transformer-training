@@ -167,7 +167,7 @@ def compute_bucket_boundaries(feature_values, method, num_buckets):
     for i, values in enumerate(feature_values):
         # Feature 1 is constant => skip
         if i == 0:
-            boundaries[i] = [0.8]
+            # Skip feature 1 (base RTT)
             continue
 
         arr = np.array(values)
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-path", default=BOUNDARY_SAVE_PATH, help="Base path to save boundary pickle")
     parser.add_argument("--method", choices=["quantile","histogram","kmeans"], default="quantile",
                         help="Bucketization method to use")
-    parser.add_argument("--num-buckets", type=int, default=50,
+    parser.add_argument("--num-buckets", type=int, default=1000,
                         help="Max number of buckets (quantile) or max_k (kmeans)")
 
     args = parser.parse_args()
