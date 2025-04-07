@@ -450,7 +450,7 @@ def train_model_reweighted0(model, dataset, optimizer, weights, prediction_len, 
         shuffle_idx = torch.randperm(dataset.shape[0])
         dataset = dataset[shuffle_idx, :, :]
     
-def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, num_classes=2, vocab_dict=None):
+def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, num_classes=2, vocab_dict=None):
     
     # Use cross-entropy loss for multi-class classification
     loss_func = nn.CrossEntropyLoss()
@@ -539,7 +539,7 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
         if checkpoint_suffix is not None and (epoch + 1) % 10 == 0:
             with open('./Loss_log_' + checkpoint_suffix + '.p', 'wb') as f:
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-            torch.save(model, './Models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
+            torch.save(model, '/datastor1/janec/models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
 
         # Shuffle dataset at the end of each epoch
         shuffle_idx = torch.randperm(dataset.shape[0])
@@ -547,7 +547,98 @@ def train_model_vocab(model, dataset, optimizer, prediction_len, device, num_epo
 
     print(f"Final Epoch: Loss = {epoch_loss:.6f}")
     return model, loss_traj
+
+def train_model_vocab_multi(
+    model, dataset, optimizer, prediction_len, device,
+                            num_epochs=1000, batch_size=2048, checkpoint_suffix=None,
+                            num_heads=5, max_bucket=100
+):
+    """
+    Multi-head approach:
+      dataset shape: (N, total_seq_len, 5)
+        e.g. (N,20,5) for 5 features each time step
+      model output: (batch_size, prediction_len, 5, max_bucket)
+    
+    We'll compute cross-entropy for each feature individually, then sum.
+    """
+    loss_func = nn.CrossEntropyLoss()
+
+    loss_traj = []
+    model.train()
+    num_samples = dataset.shape[0]
+    seq_len = dataset.shape[1]
+    num_batch = num_samples // batch_size
+
+    for epoch in range(num_epochs):
+        epoch_loss = 0.0
+        t0 = time.time()
         
+        # Shuffle each epoch
+        shuffle_idx = torch.randperm(num_samples)
+        dataset = dataset[shuffle_idx]
+
+        for b in range(num_batch):
+            batch_data = dataset[b*batch_size:(b+1)*batch_size].clone()
+            # batch_data shape: (batch_size, seq_len, 6)
+            
+            # Model input
+            enc_input = batch_data[:, :-prediction_len, :].to(device)  
+            # => shape (batch_size, seq_len - prediction_len, 6), includes base RTT + discrete feats
+
+            dec_input = (1.5 * torch.ones((batch_size, prediction_len, 6), device=device))
+            
+            # Create your masks if needed
+            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
+
+            # The ground truth for classification
+            # shape => (batch_size, prediction_len, 6)
+            expected_output = batch_data[:, -prediction_len:, :].to(device)
+
+            optimizer.zero_grad()
+            # Suppose model_out => (batch_size, prediction_len, 5, max_bucket)
+            model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
+
+            # Cross-entropy
+            loss = 0.0
+            # We'll skip expected_output's feature 0 (base RTT) for classification
+            # so the discrete labels for each time step are expected_output[..., 1..5]
+            
+            for t in range(prediction_len):
+                # shape => (batch_size, 5, max_bucket)
+                logits_t = model_out[:, t, :, :]
+                
+                # shape => (batch_size, 6), but we only want columns [1..5]
+                labels_t = expected_output[:, t, 1:].long()  # => (batch_size, 5)
+
+                for feat_i in range(num_heads):
+                    # shape => (batch_size, max_bucket)
+                    logits_feat = logits_t[:, feat_i, :]
+                    # shape => (batch_size,)
+                    labels_feat = labels_t[:, feat_i]
+                    
+                    step_loss = loss_func(logits_feat, labels_feat)
+                    loss += step_loss
+            
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
+
+        epoch_loss /= num_batch
+        epoch_time = time.time() - t0
+        loss_traj.append(epoch_loss)
+        
+        print(f"[Multi-Head] Epoch {epoch}, Time={epoch_time:.1f}s, Loss={epoch_loss:.6f}")
+
+        # Checkpointing
+        if checkpoint_suffix is not None and (epoch+1) % 10 == 0:
+            with open(f'./Loss_log_{checkpoint_suffix}.p', 'wb') as f:
+                pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
+            torch.save(model, f'/datastor1/janec/models/Checkpoint-{checkpoint_suffix}-{epoch}iter.p')
+
+    print(f"[Multi-Head] Final Epoch Loss: {epoch_loss:.6f}")
+    return model, loss_traj
+
+
 def train_model_reweighted2(model, dataset, optimizer, weights, prediction_len, device, lw, num_epochs=NUM_EPOCHS, batch_size=BATCH_SIZE, checkpoint_suffix=None, normalizer=None, alpha=0, selected_indices=None):
     
     loss_func = weighted_mse_scale_mse(weights, device, dataset.shape[2], lw, normalizer, alpha, selected_indices)
