@@ -28,8 +28,8 @@ def check_feature_ranges(dataset_path):
     print(f"Dataset loaded: shape {data.shape}, reshaped to {reshaped.shape}.")
     for i in range(6):
         feat_vals = reshaped[:, i]
-        fmin = np.nanmin(feat_vals)
-        fmax = np.nanmax(feat_vals)
+        fmin = np.min(feat_vals)
+        fmax = np.max(feat_vals)
         print(f"Feature {i} -> Min: {fmin:.6f}, Max: {fmax:.6f}")
 
 def main():
