@@ -5,6 +5,14 @@ from glob import glob
 import argparse
 
 try:
+    from cuml.cluster import KMeans as GPUKMeans
+    import cupy as cp
+    cp.cuda.Device(1).use()
+    CUMl_AVAILABLE = True
+except ImportError:
+    CUMl_AVAILABLE = False
+
+try:
     from sklearn.cluster import KMeans
     SKLEARN_AVAILABLE = True
 except ImportError:
@@ -17,10 +25,10 @@ DATASET_DIR = "/datastor1/janec/datasets"
 COMBINED_DIR = "/datastor1/janec/datasets/combined"
 BOUNDARY_DIR = "/datastor1/janec/datasets/boundaries"
 
-TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-train.p")
-TEST_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-test.p")
+TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col_20rtt_train_combined.p")
 
 FEATURE_DIM = 6
+MAX_SAMPLES_PER_FEATURE = 2000000
 
 ###############################################
 #             Collect Feature Values
@@ -87,67 +95,15 @@ def get_freedman_diaconis_boundaries(arr):
             break
     return boundaries
 
-###############################################
-#      K-Means: 1) Find Optimal K, 2) Boundaries
-###############################################
-def find_optimal_k_elbow_silhouette(data, max_k=10):
-    """
-    data: 1D or 2D NumPy array of shape (N, 1) or (N, D).
-    max_k: largest number of clusters to try.
-    Returns: (best_k_elbow, best_k_silhouette).
-    """
-    inertia_values = []
-    silhouette_values = []
-    ks = range(2, max_k + 1)
 
-    best_k_sil = 2
-    best_sil_score = -1
+def get_kmeans_boundaries_gpu(arr, n_clusters):
+    data_gpu = cp.asarray(arr.reshape(-1, 1))
+    kmeans = GPUKMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(data_gpu)
 
-    for k in ks:
-        kmeans = KMeans(n_clusters=k, random_state=42).fit(data)
-        inertia_values.append(kmeans.inertia_)
+    centers = cp.asnumpy(kmeans.cluster_centers_).flatten()
+    centers = np.sort(centers)
 
-        labels = kmeans.labels_
-        sil = silhouette_score(data, labels)
-        silhouette_values.append(sil)
-
-        if sil > best_sil_score:
-            best_sil_score = sil
-            best_k_sil = k
-
-    # "Elbow": pick k with largest drop in inertia (naive approach).
-    diffs = np.diff(inertia_values)
-    elbow_idx = np.argmax(diffs) 
-    best_k_elbow = ks[elbow_idx]
-
-    # Example: you can show plots here if desired
-    plt.figure()
-    plt.plot(ks, inertia_values, marker='o')
-    plt.title("Elbow Method (Inertia)")
-    plt.xlabel("k")
-    plt.ylabel("Inertia")
-    plt.savefig("elbow_method.png")
-    plt.close()
-
-    plt.figure()
-    plt.plot(ks, silhouette_values, marker='o')
-    plt.title("Silhouette Scores")
-    plt.xlabel("k")
-    plt.ylabel("Average Silhouette Score")
-    plt.savefig("silhouette_scores.png")
-    plt.close()
-
-    return best_k_elbow, best_k_sil
-
-def get_kmeans_boundaries(arr, n_clusters):
-    """
-    1D k-means with n_clusters -> boundaries at midpoints between sorted cluster centers.
-    """
-    arr_reshaped = arr.reshape(-1, 1)
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42).fit(arr_reshaped)
-    centers = np.sort(kmeans.cluster_centers_.flatten())
-
-    # For k cluster centers, we get k-1 boundaries as midpoints
     boundaries = []
     for c1, c2 in zip(centers[:-1], centers[1:]):
         midpoint = (c1 + c2) / 2.0
@@ -175,85 +131,21 @@ def compute_bucket_boundaries(feature_values, method, num_buckets):
         if len(arr) == 0:
             boundaries[i] = []
             continue
+        if arr.shape[0] > MAX_SAMPLES_PER_FEATURE:
+            arr = np.random.choice(arr, size=MAX_SAMPLES_PER_FEATURE, replace=False)
 
         if method == "quantile":
             edges = get_quantile_boundaries(arr, num_buckets)
         elif method == "histogram":
             edges = get_freedman_diaconis_boundaries(arr)
         elif method == "kmeans":
-            if not SKLEARN_AVAILABLE:
-                raise RuntimeError("scikit-learn is not installed; cannot do K-means.")
-            arr_reshaped = arr.reshape(-1,1)
-            _, best_k_sil = find_optimal_k_elbow_silhouette(arr_reshaped, max_k=num_buckets)
-            edges = get_kmeans_boundaries(arr, best_k_sil)
+            edges = get_kmeans_boundaries_gpu(arr, num_buckets)
         else:
             raise ValueError(f"Unknown bucket method: {method}")
 
         boundaries[i] = edges
 
     return boundaries
-
-###############################################
-#         Train/Test Split Loading
-###############################################
-def load_or_create_train_test(dataset_dir):
-    """
-    Check if 6col-20rtt-train.p and 6col-20rtt-test.p exist in:
-      /datastor1/janec/datasets/combined/
-    If they do, return them.
-    Otherwise, gather from all .p files in dataset_dir,
-    randomly shuffle, do 80/20 split, and save them.
-    Returns list of file paths [train_file, test_file].
-    """
-    os.makedirs(COMBINED_DIR, exist_ok=True)
-    train_path = TRAIN_DATA_PATH
-    test_path = TEST_DATA_PATH
-
-    if os.path.exists(train_path) and os.path.exists(test_path):
-        print(f"Train/test files found:\n  {train_path}\n  {test_path}")
-        return [train_path, test_path]
-    else:
-        print("No existing train/test split found. Creating new split...")
-
-        all_pickle_files = glob(os.path.join(dataset_dir, "*.p"))
-        print(f"Found {len(all_pickle_files)} .p files in {dataset_dir}...")
-
-        # Collect all data into a single list of arrays
-        all_data_arrays = []
-        for f in all_pickle_files:
-            with open(f, 'rb') as handle:
-                data = pickle.load(handle)
-                # Expect (N, 20, 6)
-                if (
-                    isinstance(data, np.ndarray) 
-                    and len(data.shape) == 3 
-                    and data.shape[2] == FEATURE_DIM
-                ):
-                    all_data_arrays.append(data)
-        if not all_data_arrays:
-            print("No valid .p data found.")
-            return []
-
-        combined_data = np.concatenate(all_data_arrays, axis=0)  # shape (X, 20, 6)
-        print(f"Combined dataset shape: {combined_data.shape}")
-
-        # Shuffle
-        np.random.shuffle(combined_data)
-
-        # Split 80/20
-        cutoff = int(0.8 * len(combined_data))
-        train_data = combined_data[:cutoff]
-        test_data = combined_data[cutoff:]
-
-        with open(train_path, "wb") as f:
-            pickle.dump(train_data, f)
-        with open(test_path, "wb") as f:
-            pickle.dump(test_data, f)
-
-        print(f"Created train: {train_path} -> shape {train_data.shape}")
-        print(f"Created test : {test_path} -> shape {test_data.shape}")
-
-        return [train_path, test_path]
 
 ###############################################
 #                     Main
@@ -269,17 +161,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # 1) Load or create train/test .p files
-    split_files = load_or_create_train_test(args.dataset_dir)
-    if len(split_files) < 2:
-        print("No data to process. Exiting.")
-        exit(0)
-
-    # 2) Combine the train/test for boundary calculation 
-    #    (Alternatively, you can just read from train data to avoid leakage.)
-    data_files = split_files  # or [split_files[0]] if you want train-only
+    if os.path.exists(TRAIN_DATA_PATH):
+        print(f"Train/test files found:\n  {TRAIN_DATA_PATH}")
+    else:
+        print(f"Train/test files not found: {TRAIN_DATA_PATH}")
+        exit(1)
 
     # 3) Collect feature values
-    feature_values = collect_feature_values(data_files)
+    feature_values = collect_feature_values([TRAIN_DATA_PATH])
 
     # 4) Compute boundaries
     bucket_boundaries = compute_bucket_boundaries(feature_values, args.method, args.num_buckets)
@@ -288,7 +177,7 @@ if __name__ == "__main__":
     # os.makedirs(BOUNDARY_DIR, exist_ok=True)
 
     # e.g. boundaries-quantile1000.pkl or boundaries-kmeans.pkl
-    if args.method == "quantile":
+    if args.method == "quantile" or args.method == "kmeans":
         boundaries_filename = f"boundaries-{args.method}{args.num_buckets}.pkl"
     else:
         boundaries_filename = f"boundaries-{args.method}.pkl"
