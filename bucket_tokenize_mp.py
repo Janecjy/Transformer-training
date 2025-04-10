@@ -10,7 +10,7 @@ from multiprocessing import Pool, cpu_count
 # Paths
 ##########################################
 COMBINED_DIR = "/datastor1/janec/datasets/combined"
-TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-train.p")
+TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col_20rtt_train_combined.p")
 FEATURE_DIM = 6
 
 ##########################################
@@ -19,7 +19,7 @@ FEATURE_DIM = 6
 def bucketize_value(value, boundaries):
     if not boundaries:
         return 0
-    idx = np.searchsorted(boundaries, value, side='right')
+    idx = np.searchsorted(boundaries, value, side='left')
     return idx
 
 ##########################################
