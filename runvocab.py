@@ -191,6 +191,7 @@ if args.token_type == "single":
         batch_size=BATCH_SIZE,
         checkpoint_suffix=save_name,
         num_classes=num_classes,
+        vocab_dict=vocab_dict,
     )
 else:
     # Multi-head
