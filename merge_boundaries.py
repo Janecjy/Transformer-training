@@ -30,6 +30,8 @@ if __name__ == "__main__":
     boundary_files = sorted(glob(os.path.join(BOUNDARY_DIR, "boundaries-*.pkl")))
 
     for file_path in boundary_files:
+        if "merged" in file_path:
+            continue
         print(f"\nProcessing: {os.path.basename(file_path)}")
 
         # Load original boundaries

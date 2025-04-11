@@ -137,6 +137,9 @@ def compute_bucket_boundaries(feature_values, method, num_buckets):
         if method == "quantile":
             edges = get_quantile_boundaries(arr, num_buckets)
         elif method == "histogram":
+            MAX_HIST_SAMPLES = 10_000
+            if arr.shape[0] > MAX_HIST_SAMPLES:
+                arr = np.random.choice(arr, size=MAX_HIST_SAMPLES, replace=False)
             edges = get_freedman_diaconis_boundaries(arr)
         elif method == "kmeans":
             edges = get_kmeans_boundaries_gpu(arr, num_buckets)

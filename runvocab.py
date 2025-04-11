@@ -1,11 +1,27 @@
 import torch
-from models import Seq2SeqWithEmbeddingmodClass, Seq2SeqWithEmbeddingmodClassMoreEmbedding
+from models import Seq2SeqWithEmbeddingmodClass, Seq2SeqWithEmbeddingmodClassMultiHead
 from utils import train_model_vocab_single, train_model_vocab_multi
 import pickle
 import argparse
 import numpy as np
 import os
 import ntpath
+
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+
+class TokenDataset(Dataset):
+    def __init__(self, data):
+        # data shape: (N, 20, 1) or (N, 20, D)
+        self.data = data
+
+    def __len__(self):
+        return self.data.shape[0]
+
+    def __getitem__(self, idx):
+        # Returns shape (20, 1)
+        return self.data[idx]
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -60,7 +76,6 @@ selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
 alpha = args.Alpha
 add_name = args.ModelName
-save_name = add_name+"_Transformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_"+str(args.boundaries_file)+"_"+str(args.token_type)
 more_embedding = args.MoreEmbedding
 
 #CONSTANTS
@@ -71,14 +86,14 @@ gc.collect()
 # DEVICE = torch.device("cpu")
 print(DEVICE)
 PAD_IDX = 2
-BATCH_SIZE = 1024*2
+BATCH_SIZE = 2048
 NUM_EPOCHS = 1000
 CONTEXT_LENGTH = 10
 PREDICTION_LENGTH = 10
 
 boundary_base = ntpath.basename(args.boundaries_file)  # e.g. boundaries-quantile100.pkl
 boundary_noext = os.path.splitext(boundary_base)[0]    # e.g. boundaries-quantile100
-
+print("Token type:", args.token_type)
 if args.token_type == 'single':
     tokenized_path = os.path.join(
         "/datastor1/janec/datasets/combined",
@@ -89,6 +104,7 @@ else:
         "/datastor1/janec/datasets/combined",
         f"{boundary_noext}-tokenized-multi.pkl"
     )
+save_name = add_name+"_Transformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_"+str(boundary_noext)+"_"+str(args.token_type)
 
 if not os.path.isfile(tokenized_path):
     raise FileNotFoundError(f"Tokenized file not found: {tokenized_path}")
@@ -113,15 +129,26 @@ else:
     train_dataset_np = tokenized_data["tokens_multi"]   # shape (N,20,5)
     num_classes = int(np.max(train_dataset_np) + 1)
     print(f"[Multi-Head] shape={train_dataset_np.shape}, max bucket index={num_classes-1}")
+    assert base_rtt.shape == train_dataset_np.shape[:2], "base_rtt and tokens_multi must have the same (N, 20) shape"
+    
+    # Expand base_rtt to shape (N, 20, 1)
+    base_rtt_expanded = np.expand_dims(base_rtt, axis=-1)
+
+    # Concatenate base_rtt as the first feature (dim=2)
+    train_dataset_np = np.concatenate([base_rtt_expanded, train_dataset_np], axis=2)  # shape (N, 20, 6)
+    print(f"train_dataset_np shape after concat = {train_dataset_np.shape}")
 
 
 train_dataset = torch.from_numpy(train_dataset_np).to(torch.float32)
 
+dataset = TokenDataset(train_dataset)  # your existing train_dataset
+loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
+
 print("Final train_dataset shape:", train_dataset.shape)
 
-train_dataset = train_dataset.to(DEVICE)
+# train_dataset = train_dataset.to(DEVICE)
 # Possibly check dataset size
-print("Train data loaded: shape =", train_dataset.shape)
+# print("Train data loaded: shape =", train_dataset.shape)
 
 # We define the "vocab_dict" only if single
 if args.token_type == 'single':
@@ -129,14 +156,25 @@ if args.token_type == 'single':
 else:
     vocab_dict = None  # or some dictionary if you want a multi approach
     
-model = Seq2SeqWithEmbeddingmodClass(num_encoder_layers=num_encoder_layers,
-                            num_decoder_layers=num_decoder_layers,
-                            input_size=train_dataset.shape[-1],
-                            emb_size=emb_size,
-                            nhead=nhead,
-                            dim_feedforward=dim,
-                            dropout=0,
-                            num_classes=num_classes).to(DEVICE)
+if args.token_type == 'single':
+    model = Seq2SeqWithEmbeddingmodClass(num_encoder_layers=num_encoder_layers,
+                                num_decoder_layers=num_decoder_layers,
+                                input_size=train_dataset.shape[-1],
+                                emb_size=emb_size,
+                                nhead=nhead,
+                                dim_feedforward=dim,
+                                dropout=0,
+                                num_classes=num_classes).to(DEVICE)
+else:
+    model = Seq2SeqWithEmbeddingmodClassMultiHead(num_encoder_layers=num_encoder_layers,
+                                num_decoder_layers=num_decoder_layers,
+                                input_size=train_dataset.shape[-1],
+                                emb_size=emb_size,
+                                nhead=nhead,
+                                dim_feedforward=dim,
+                                dropout=0,
+                                num_heads=5,
+                                max_bucket=num_classes).to(DEVICE)
 
 print(sum(p.numel() for p in model.parameters() if p.requires_grad))
 
@@ -145,7 +183,7 @@ if args.token_type == "single":
     # Single-combo
     model, loss_traj = train_model_vocab_single(
         model,
-        dataset=train_dataset,
+        dataset=loader,
         optimizer=opt,
         prediction_len=PREDICTION_LENGTH,
         device=DEVICE,
@@ -160,7 +198,7 @@ else:
     # Or pass a param. We'll do 5 to match shape (N,20,5).
     model, loss_traj = train_model_vocab_multi(
         model,
-        dataset=train_dataset,
+        dataset=loader,
         optimizer=opt,
         prediction_len=PREDICTION_LENGTH,
         device=DEVICE,

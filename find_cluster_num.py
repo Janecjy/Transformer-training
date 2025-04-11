@@ -56,6 +56,8 @@ def find_optimal_k_elbow_silhouette_gpu(feature_idx, data, max_k=10):
     plt.plot(ks, inertia_values, marker='o')
     plt.xlabel("Number of Clusters", fontsize=20)
     plt.ylabel("Inertia", fontsize=20)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     plt.tight_layout()
     plt.savefig(f"fig/{feature_idx}_elbow_method.png")
     plt.close()
@@ -64,7 +66,10 @@ def find_optimal_k_elbow_silhouette_gpu(feature_idx, data, max_k=10):
     plt.plot(ks, silhouette_values, marker='o')
     plt.xlabel("Number of Clusters", fontsize=20)
     plt.ylabel("Silhouette Score", fontsize=20)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     plt.savefig(f"fig/{feature_idx}_silhouette_scores.png")
+    plt.tight_layout()
     plt.close()
 
     return best_k_elbow, best_k_sil

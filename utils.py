@@ -14,6 +14,10 @@ NUM_EPOCHS = 250
 CONTEXT_LENGTH = 32
 PREDICTION_LENGTH = 32
 
+from torch.cuda.amp import autocast, GradScaler
+
+scaler = GradScaler()
+
 torch.manual_seed(0)
 
 def form_dataset_mod(filelist, context_len, prediction_len, input_dim=13):
@@ -456,16 +460,21 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
     loss_func = nn.CrossEntropyLoss()
     loss_traj = []
     model.train()
-    num_batch = dataset.shape[0] // batch_size
+    # num_batch = dataset.shape[0] // batch_size
     
     for epoch in range(num_epochs):
         epoch_loss = 0.0
         t0 = time.time()
         
-        for batch in range(num_batch):
-            input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
+        for input in dataset:
+            input = input.to(device)
+            # print("input.shape: ", input.shape)
             enc_input = input[:, :-prediction_len, :].to(device)
-            dec_input = (1.5 * torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
+            dec_input = (1.5 * torch.ones((input.size(0), prediction_len, input.size(2)))).to(device)
+
+            # input = dataset[batch*batch_size:(batch+1)*batch_size, :, :].clone()
+            # enc_input = input[:, :-prediction_len, :].to(device)
+            # dec_input = (1.5 * torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             expected_output = input[:, -prediction_len:, :].to(device)
 
@@ -530,7 +539,7 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
         
         # Epoch time and loss
         epoch_time = time.time() - t0
-        epoch_loss /= num_batch
+        # epoch_loss /= num_batch
         loss_traj.append(epoch_loss)
         
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds, Loss = {epoch_loss:.6f}")
@@ -541,9 +550,9 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
             torch.save(model, '/datastor1/janec/models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
 
-        # Shuffle dataset at the end of each epoch
-        shuffle_idx = torch.randperm(dataset.shape[0])
-        dataset = dataset[shuffle_idx, :, :]
+        # # Shuffle dataset at the end of each epoch
+        # shuffle_idx = torch.randperm(dataset.shape[0])
+        # dataset = dataset[shuffle_idx, :, :]
 
     print(f"Final Epoch: Loss = {epoch_loss:.6f}")
     return model, loss_traj
@@ -565,27 +574,32 @@ def train_model_vocab_multi(
 
     loss_traj = []
     model.train()
-    num_samples = dataset.shape[0]
-    seq_len = dataset.shape[1]
-    num_batch = num_samples // batch_size
+    # num_samples = dataset.shape[0]
+    # seq_len = dataset.shape[1]
+    # num_batch = num_samples // batch_size
 
     for epoch in range(num_epochs):
         epoch_loss = 0.0
         t0 = time.time()
         
         # Shuffle each epoch
-        shuffle_idx = torch.randperm(num_samples)
-        dataset = dataset[shuffle_idx]
+        # shuffle_idx = torch.randperm(num_samples)
+        # dataset = dataset[shuffle_idx]
 
-        for b in range(num_batch):
-            batch_data = dataset[b*batch_size:(b+1)*batch_size].clone()
+        for input in dataset:
+            batch_data = input.to(device)
+            # print("input.shape: ", batch_data.shape)
+            enc_input = input[:, :-prediction_len, :].to(device)
+            dec_input = (1.5 * torch.ones((input.size(0), prediction_len, input.size(2)))).to(device)
+        # for b in range(num_batch):
+        #     batch_data = dataset[b*batch_size:(b+1)*batch_size].clone()
             # batch_data shape: (batch_size, seq_len, 6)
             
             # Model input
-            enc_input = batch_data[:, :-prediction_len, :].to(device)  
+            # enc_input = batch_data[:, :-prediction_len, :].to(device)  
             # => shape (batch_size, seq_len - prediction_len, 6), includes base RTT + discrete feats
 
-            dec_input = (1.5 * torch.ones((batch_size, prediction_len, 6), device=device))
+            # dec_input = (1.5 * torch.ones((batch_size, prediction_len, 6), device=device))
             
             # Create your masks if needed
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
@@ -623,7 +637,7 @@ def train_model_vocab_multi(
             optimizer.step()
             epoch_loss += loss.item()
 
-        epoch_loss /= num_batch
+        # epoch_loss /= num_batch
         epoch_time = time.time() - t0
         loss_traj.append(epoch_loss)
         
@@ -631,7 +645,7 @@ def train_model_vocab_multi(
 
         # Checkpointing
         if checkpoint_suffix is not None and (epoch+1) % 10 == 0:
-            with open(f'./Loss_log_{checkpoint_suffix}.p', 'wb') as f:
+            with open(f'/datastor1/janec/models/Loss_log_{checkpoint_suffix}.p', 'wb') as f:
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
             torch.save(model, f'/datastor1/janec/models/Checkpoint-{checkpoint_suffix}-{epoch}iter.p')
 
