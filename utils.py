@@ -468,7 +468,7 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
         
         for input in dataset:
             input = input.to(device)
-            # print("input.shape: ", input.shape)
+            print("input.shape: ", input.shape)
             enc_input = input[:, :-prediction_len, :].to(device)
             dec_input = (1.5 * torch.ones((input.size(0), prediction_len, input.size(2)))).to(device)
 
@@ -477,62 +477,21 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
             # dec_input = (1.5 * torch.ones((batch_size, prediction_len, input.shape[2]))).to(device)
             src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, pad_idx=PAD_IDX, device=device)
             expected_output = input[:, -prediction_len:, :].to(device)
+            print("expected_output.shape: ", expected_output.shape)
 
             # Forward pass
             model_out = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
             optimizer.zero_grad()
 
-            # use tokenizer
-            # Transform expected_output to class indices
-            batch_classes = []
-            for i in range(batch_size):
-                for t in range(prediction_len):
-                    # vector = tuple(expected_output[i, t, :].tolist())
-                    base_rtt_val = expected_output[i, t, 0]  # continuous float
-                    discrete_features = tuple(expected_output[i, t, 1:].tolist())  # 5D
-                    class_idx = vocab_dict.get(discrete_features, -1)
-                    # class_idx = vocab_dict.get(vector, -1)  # Get class index from vocab_dict
-                    if class_idx == -1:
-                        raise ValueError(f"Vector not found in vocab_dict: {discrete_features}")
-                    batch_classes.append(class_idx)
+            # Reshape for CE loss
+            logits = model_out.view(-1, num_classes)  # (B * pred_len, num_classes)
+            targets = expected_output.reshape(-1).long()  # (B * pred_len)
 
-            # Convert to tensor and move to device
-            batch_classes = torch.tensor(batch_classes, dtype=torch.long).to(device)
-            batch_classes = batch_classes.view(batch_size, prediction_len)  # Reshape for batch
+            # Check for valid range
+            if (targets < 0).any() or (targets >= num_classes).any():
+                raise ValueError(f"Invalid class indices in targets: min={targets.min()}, max={targets.max()}, num_classes={num_classes}")
 
-            # Ensure all class indices are valid
-            if (batch_classes < 0).any() or (batch_classes >= num_classes).any():
-                raise ValueError(f"Invalid class indices found: {batch_classes}")
-            
-            # Ensure there are no negative values in batch_classes
-            assert (batch_classes >= 0).all(), "Negative class indices found in batch_classes."
-
-            # Ensure that the indices do not exceed the number of classes
-            assert (batch_classes < num_classes).all(), "Class indices exceed number of classes."
-
-
-            # valid_mask = (expected_output[:, :, :].sum(dim=-1) != -1).to(device)  # True where not -1
-            # valid_indices = valid_mask.flatten()  # Flatten to get a 1D mask
-
-            
-            model_out = model_out.view(batch_size, prediction_len, -1)  # Reshape to [batch_size, prediction_len, num_classes]
-
-            # print("model_out.shape: ", model_out.shape)
-            # print("batch_classes.shape: ", batch_classes.shape)
-            # Calculate loss
-            loss = 0
-            for i in range(prediction_len):
-                logits = model_out[:, i, :]  # Model output for time step i
-                # print("logits.shape: ", logits.shape)
-                loss += loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
-                # print("logits: ", logits.shape, ", sum: ", torch.sum(logits, dim=1))
-                # print("batch_classes: ", batch_classes[:, i].shape, ", value: ", batch_classes[:, i])
-                # current_valid_mask = valid_mask[:, i].flatten()  # True for valid entries for this time step
-                # per_step_loss = loss_func(logits, batch_classes[:, i])  # Cross-entropy loss for step i
-                # Only consider losses where valid
-                # loss += per_step_loss[current_valid_mask].sum()
-
-            # Backpropagation
+            loss = loss_func(logits, targets)
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
