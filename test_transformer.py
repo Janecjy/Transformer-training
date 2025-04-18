@@ -1,165 +1,256 @@
-import torch
 import os
 import pickle
+import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from models import Seq2SeqWithEmbeddingmodClassMultiHead
 from utils import create_mask
 from tqdm import tqdm
-import bisect
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--load_existing', action='store_true', help='Load results from existing .pkl files')
+parser.add_argument('--num_samples', type=int, default=10000, help='Number of samples to test')
+args = parser.parse_args()
 
 DEVICE = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 PAD_IDX = 2
 PREDICTION_LENGTH = 10
-
-# === CONFIG ===
-TEST_SET_PATH = "/datastor1/janec/datasets_old/combined/6col-20rtt-test.p"
-BOUNDARIES_MAP = {
-    "quantile50": "/datastor1/janec/datasets_old/combined/boundaries-quantile50-tokenized-multi.pkl",
-    "quantile100": "/datastor1/janec/datasets_old/combined/boundaries-quantile100-tokenized-multi.pkl",
-}
-MODELS_TO_TEST = [
-    "/datastor1/janec/models_old/Checkpoint-Combined_10RTT_6col_Transformer3_128_2_2_16_2_lr_0.0001_boundaries-quantile50_multi-619iter.p",
-    "/datastor1/janec/models_old/Checkpoint-Combined_10RTT_6col_Transformer3_256_4_4_32_4_lr_0.0001_boundaries-quantile100_multi-369iter.p",
-    "/datastor1/janec/models_old/Checkpoint-Combined_10RTT_6col_Transformer3_256_3_3_32_4_lr_5e-05_boundaries-quantile100_multi-419iter.p",
-    "/datastor1/janec/models_old/Checkpoint-Combined_10RTT_6col_Transformer3_256_4_4_32_4_lr_0.0001_boundaries-quantile50_multi-399iter.p",
-]
 NUM_FEATURES = 5  # exclude base RTT
 
-# === LOAD TEST SET ===
-with open(TEST_SET_PATH, "rb") as f:
-    test_data_np = pickle.load(f)
-    # sample
-    test_data_np = test_data_np[:30000]  # for testing
-test_data = torch.tensor(test_data_np, dtype=torch.float32).to(DEVICE)
+TEST_SETS = [
+    "6col_20rtt_cc-real_test_combined.p",
+    "6col_20rtt_cc-synthetic_test_combined.p",
+    "6col_20rtt_pensieve-real_test_combined.p",
+    "6col_20rtt_pensieve-synthetic_test_combined.p",
+]
+TEST_DIR = "/datastor1/janec/datasets/combined"
+BOUNDARY_DIR = "/datastor1/janec/datasets/combined"
+MODEL_DIR = "/datastor1/janec/complete-models"
 
-# === HELPER FUNCTIONS ===
+BOUNDARY_FILES = {
+    "quantile30": "boundaries-quantile30-merged-tokenized-multi.pkl",
+    "quantile50": "boundaries-quantile50-merged-tokenized-multi.pkl",
+    "quantile80": "boundaries-quantile80-merged-tokenized-multi.pkl",
+    "quantile100": "boundaries-quantile100-merged-tokenized-multi.pkl",
+    "kmeans30": "boundaries-kmeans30-merged-tokenized-multi.pkl",
+    "kmeans50": "boundaries-kmeans50-merged-tokenized-multi.pkl",
+    "kmeans80": "boundaries-kmeans80-merged-tokenized-multi.pkl",
+    "kmeans100": "boundaries-kmeans100-merged-tokenized-multi.pkl",
+    "histogram": "boundaries-histogram-merged-tokenized-multi.pkl"
+}
+
+MODELS_TO_TEST = [
+    os.path.join(MODEL_DIR, f) for f in os.listdir(MODEL_DIR) if f.endswith(".p")
+]
+
+def get_clean_label(model_name):
+    if "kmeans30" in model_name:
+        return "KMeans-30"
+    elif "kmeans50" in model_name:
+        return "KMeans-50"
+    elif "kmeans80" in model_name:
+        return "KMeans-80"
+    elif "kmeans100" in model_name:
+        return "KMeans-100"
+    elif "quantile30" in model_name:
+        return "Quantile-30"
+    elif "quantile50" in model_name:
+        return "Quantile-50"
+    elif "quantile80" in model_name:
+        return "Quantile-80"
+    elif "quantile100" in model_name:
+        return "Quantile-100"
+    elif "histogram" in model_name:
+        return "Histogram"
+    else:
+        return model_name  # fallback to full name if unknown
+
 def compute_cdf(distances):
     sorted_vals = np.sort(distances)
     cdf = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
     return sorted_vals, cdf
 
 def get_true_bucket_index(value, boundaries):
-    # returns index 0 to len(boundaries)
-    return bisect.bisect_right(boundaries, value)
+    if not boundaries:
+        return 0
+    idx = np.searchsorted(boundaries, value, side='left')
+    return idx
 
 def make_bucket_midpoints(boundaries):
+    if not boundaries:
+        return []
+
     midpoints = []
 
-    # Leftmost bucket: extrapolate midpoint below first boundary
+    # Clamp gap if extremely large or suspicious
     left_gap = boundaries[1] - boundaries[0] if len(boundaries) > 1 else 1
+    if abs(left_gap) > 10:
+        left_gap = 0  # prevent wild extrapolation
+
+    # Leftmost bucket midpoint (extrapolated)
     leftmost = boundaries[0] - left_gap / 2
     midpoints.append(leftmost)
 
-    # Middle buckets
+    # Mid-bucket midpoints
     for i in range(len(boundaries) - 1):
-        mid = (boundaries[i] + boundaries[i+1]) / 2
-        midpoints.append(mid)
+        midpoints.append((boundaries[i] + boundaries[i + 1]) / 2)
 
-    # Rightmost bucket: extrapolate
     right_gap = boundaries[-1] - boundaries[-2] if len(boundaries) > 1 else 1
+    if abs(right_gap) > 10:
+        right_gap = 0
+
+    # Rightmost bucket midpoint (extrapolated)
     rightmost = boundaries[-1] + right_gap / 2
     midpoints.append(rightmost)
 
     return midpoints
 
-# === MAIN TEST LOOP ===
-cdf_val_results = {}
-cdf_bucket_dist_results = {}
 
-for model_path in MODELS_TO_TEST:
-    # Determine boundary file from model name
-    if "quantile50" in model_path:
-        boundaries_path = BOUNDARIES_MAP["quantile50"]
-    elif "quantile100" in model_path:
-        boundaries_path = BOUNDARIES_MAP["quantile100"]
+
+for test_set in TEST_SETS:
+    tag = test_set.replace(".p", "")
+
+    if args.load_existing:
+        cdf_val_results = {feat: pickle.load(open(f"log/transformer-distance/cdf_val_results_{tag}_feat{feat}.pkl", "rb")) for feat in range(1, NUM_FEATURES + 1)}
+        cdf_bucket_dist_results = {feat: pickle.load(open(f"log/transformer-distance/cdf_bucket_dist_results_{tag}_feat{feat}.pkl", "rb")) for feat in range(1, NUM_FEATURES + 1)}
+        print(f"=== Loaded existing results for {test_set} ===")
+        for k in cdf_val_results[3].keys():
+            print(f"Model: {k} -> {get_clean_label(k)}")
+        # print(f"Value distance results for feature 3: {cdf_val_results[3].keys()}")
     else:
-        raise ValueError(f"Unknown quantile for model: {model_path}")
+    
+        print(f"=== Running on test set: {test_set} ===")
+        with open(os.path.join(TEST_DIR, test_set), "rb") as f:
+            test_data_np = pickle.load(f)
+            test_data_np = np.concatenate(test_data_np, axis=0)
 
-    with open(boundaries_path, "rb") as f:
-        boundary_data = pickle.load(f)
-    boundaries_dict = boundary_data["boundaries_dict"]
+        # Randomly sample 30,000 rows without replacement
+        sample_indices = np.random.choice(test_data_np.shape[0], size=args.num_samples, replace=False)
+        test_data_np = test_data_np[sample_indices]
 
-    # Compute bucket midpoints (include extrapolated rightmost bucket)
-    bucket_midpoints = {}
-    for feat, boundaries in boundaries_dict.items():
-        bucket_midpoints[feat] = make_bucket_midpoints(boundaries)
-        # print(f"Feature {feat}: {len(bucket_midpoints[feat])} midpoints (for {len(boundaries)+1} buckets)")
+        # Convert to tensor
+        test_data = torch.from_numpy(test_data_np).float().to(DEVICE)
+        
+        cdf_val_results = {feat: {} for feat in range(1, NUM_FEATURES + 1)}
+        cdf_bucket_dist_results = {feat: {} for feat in range(1, NUM_FEATURES + 1)}
 
-    # print(f"\nLoading model: {model_path}")
-    model = torch.load(model_path, map_location=DEVICE)
-    model.eval()
+        for model_path in MODELS_TO_TEST:
+            model_name = os.path.basename(model_path)
 
-    all_val_distances = []
-    all_bucket_distances = []
+            matched_boundary_key = None
+            for key in BOUNDARY_FILES:
+                if key in model_name:
+                    matched_boundary_key = key
+                    break
+            if matched_boundary_key is None:
+                print(f"Skipping {model_name} (no matching boundary key)")
+                continue
 
-    with torch.no_grad():
-        for i in tqdm(range(test_data.shape[0])):
-            sample = test_data[i:i+1]  # shape (1, 20, 6)
-            enc_input = sample[:, :-PREDICTION_LENGTH, :]
-            dec_input = 1.5 * torch.ones((1, PREDICTION_LENGTH, 6)).to(DEVICE)
-            expected_output = sample[:, -PREDICTION_LENGTH:, :]
+            boundaries_path = os.path.join(BOUNDARY_DIR, BOUNDARY_FILES[matched_boundary_key])
+            with open(boundaries_path, "rb") as f:
+                boundaries_dict = pickle.load(f)["boundaries_dict"]
+            print(f"Boundaries loaded from {boundaries_path}")
+            bucket_midpoints = {
+                feat: make_bucket_midpoints(boundaries)
+                for feat, boundaries in boundaries_dict.items()
+            }
+            model = torch.load(model_path, map_location=DEVICE)
+            model.eval()
 
-            src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, PAD_IDX, DEVICE)
-            pred = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)  # shape (1, 10, 5, B)
+            val_distances_by_feat = {feat: [] for feat in range(1, NUM_FEATURES + 1)}
+            bucket_distances_by_feat = {feat: [] for feat in range(1, NUM_FEATURES + 1)}
 
-            for t in range(PREDICTION_LENGTH):
-                for feat in range(NUM_FEATURES):
-                    feat_idx = feat + 1  # skip base RTT
 
-                    bucket_idx = pred[0, t, feat].argmax().item()
-                    midpoints = bucket_midpoints[feat + 1]
-                    if bucket_idx >= len(midpoints):
-                        print(f"[WARNING] bucket_idx {bucket_idx} out of range for feature {feat+1}. Clamping.")
-                        bucket_idx = len(midpoints) - 1
+            with torch.no_grad():
+                for i in tqdm(range(test_data.shape[0]), desc=f"{test_set}-{model_name}"):
+                    sample = test_data[i:i+1]
+                    enc_input = sample[:, :-PREDICTION_LENGTH, :]
+                    dec_input = 1.5 * torch.ones((1, PREDICTION_LENGTH, 6)).to(DEVICE)
+                    expected_output = sample[:, -PREDICTION_LENGTH:, :]
 
-                    predicted_value = midpoints[bucket_idx]
-                    true_value = expected_output[0, t, feat + 1].item()
+                    src_mask, tgt_mask, _, _ = create_mask(enc_input, dec_input, PAD_IDX, DEVICE)
+                    pred = model(enc_input, dec_input, src_mask, tgt_mask, None, None, None)
 
-                    bucket_idx = pred[0, t, feat].argmax().item()
-                    # print(f"Predicted bucket index for feature {feat_idx}: {bucket_idx}")
-                    predicted_value = bucket_midpoints[feat_idx][bucket_idx]
-                    true_value = expected_output[0, t, feat_idx].item()
-                    val_dist = abs(predicted_value - true_value)
+                    for t in range(PREDICTION_LENGTH):
+                        for feat in range(NUM_FEATURES):
+                            feat_idx = feat + 1
+                            bucket_idx = pred[0, t, feat].argmax().item()
+                            midpoints = bucket_midpoints[feat_idx]
+                            if not midpoints:
+                                continue  # skip this feature if midpoints list is empty
 
-                    # Get true bucket index from boundaries
-                    boundaries = boundaries_dict[feat_idx]
-                    true_bucket = get_true_bucket_index(true_value, boundaries)
-                    bucket_dist = abs(bucket_idx - true_bucket)
+                            bucket_idx = min(bucket_idx, len(midpoints) - 1)
+                            predicted_value = midpoints[bucket_idx]
+                            true_value = expected_output[0, t, feat_idx].item()
+                            true_bucket = get_true_bucket_index(true_value, boundaries_dict[feat_idx])
+                            bucket_dist = abs(bucket_idx - true_bucket)
+                            
+                            # --- Clamp for Feature 3 ---
+                            if feat_idx == 3:
+                                max_reasonable_value = 10.0
+                                true_value = min(true_value, max_reasonable_value)
+                                predicted_value = min(predicted_value, max_reasonable_value)
 
-                    all_val_distances.append(val_dist)
-                    all_bucket_distances.append(bucket_dist)
+                            val_dist = abs(predicted_value - true_value)
+                            
+                            if val_dist > 1000 and feat_idx == 3:
+                                print("model_name:", model_name)
+                                print(f"Feature {feat_idx} - Sample {i} - Bucket index: {bucket_idx}, True bucket: {true_bucket}")
+                                print(f"Mid point value 0: {midpoints[0]}, Mid point value 1: {midpoints[1]}")
+                                print(f"Mid point value -2: {midpoints[-2]}, Mid point value -1: {midpoints[-1]}")
+                                print(f"Value distance too large: {val_dist} (predicted: {predicted_value}, true: {true_value})")
+                                print(f"Boundaries: {boundaries_dict[feat_idx]}")
+                                exit(1)
 
-    # CDFs
-    model_name_short = os.path.basename(model_path)
-    cdf_val_results[model_name_short] = compute_cdf(all_val_distances)
-    cdf_bucket_dist_results[model_name_short] = compute_cdf(all_bucket_distances)
+                            val_distances_by_feat[feat_idx].append(val_dist)
+                            bucket_distances_by_feat[feat_idx].append(bucket_dist)
+            
+            for feat in range(1, NUM_FEATURES + 1):
+                cdf_val_results[feat][model_name] = compute_cdf(val_distances_by_feat[feat])
+                cdf_bucket_dist_results[feat][model_name] = compute_cdf(bucket_distances_by_feat[feat])
 
-pickle.dump(cdf_val_results, open("cdf_val_results.pkl", "wb"))
-pickle.dump(cdf_bucket_dist_results, open("cdf_bucket_dist_results.pkl", "wb"))
 
-# === PLOT VALUE CDF ===
-plt.figure(figsize=(10, 6))
-for model_name, (distances, cdf) in cdf_val_results.items():
-    plt.plot(distances, cdf, label=model_name)
-plt.title("CDF of Absolute Distance (Predicted Bucket Midpoint vs True Value)")
-plt.xlabel("Absolute Value Distance")
-plt.ylabel("CDF")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-plt.savefig("model_cdf_value_distance.png")
-plt.show()
+        for feat in range(1, NUM_FEATURES + 1):
+            with open(f"cdf_val_results_{tag}_feat{feat}.pkl", "wb") as f:
+                pickle.dump(cdf_val_results[feat], f)
+            with open(f"cdf_bucket_dist_results_{tag}_feat{feat}.pkl", "wb") as f:
+                pickle.dump(cdf_bucket_dist_results[feat], f)
 
-# === PLOT BUCKET INDEX DISTANCE CDF ===
-plt.figure(figsize=(10, 6))
-for model_name, (distances, cdf) in cdf_bucket_dist_results.items():
-    plt.plot(distances, cdf, label=model_name)
-plt.title("CDF of Bucket Index Distance (Predicted vs True Bucket)")
-plt.xlabel("Bucket Index Distance")
-plt.ylabel("CDF")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-plt.savefig("model_cdf_bucket_distance.png")
-plt.show()
+    for feat in range(1, NUM_FEATURES + 1):
+        # Value distance CDF
+        plt.figure(figsize=(10, 6))
+        for model_name, (distances, cdf) in cdf_val_results[feat].items():
+            label = get_clean_label(model_name)
+            # if not any(k in model_name for k in ["kmeans30", "kmeans100", "quantile100"]):
+            #     continue
+            distances = np.clip(distances, 1e-3, None)
+            plt.plot(distances, cdf, label=label)
+        plt.title(f"Feature {feat}: CDF of Absolute Value Distance ({tag})")
+        plt.xlabel("Absolute Value Distance")
+        plt.ylabel("CDF")
+        plt.grid(True)
+        plt.legend()
+        plt.xscale("log")
+        plt.xticks([1e-3, 1, 10, 100, 1000])
+        plt.gca().set_xticklabels(['0', '1', '10', '100', '1000'])
+        plt.tight_layout()
+        plt.savefig(f"fig/transformer-distance/model_cdf_value_distance_{tag}_feat{feat}.png")
+        plt.close()
+
+        # Bucket index distance CDF
+        plt.figure(figsize=(10, 6))
+        for model_name, (distances, cdf) in cdf_bucket_dist_results[feat].items():
+            label = get_clean_label(model_name)
+            # if not any(k in model_name for k in ["kmeans30", "kmeans100", "quantile100"]):
+            #     continue
+            plt.plot(distances, cdf, label=label)
+        plt.title(f"Feature {feat}: CDF of Bucket Index Distance ({tag})")
+        plt.xlabel("Bucket Index Distance")
+        plt.ylabel("CDF")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(f"fig/transformer-distance/model_cdf_bucket_distance_{tag}_feat{feat}.png")
+        plt.close()
+
