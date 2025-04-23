@@ -7,3 +7,5 @@ out/
 *.ipynb
 Loss*
 .DS_Store
+*.p
+*.csv

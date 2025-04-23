@@ -34,6 +34,7 @@ parser.add_argument('--AdamBeta1', '-AB1', help='Beta1 for Adam Optimizer', type
 parser.add_argument('--AdamBeta2', '-AB2', help='Beta2 for Adam Optimizer', type=float, default=0.999)
 parser.add_argument('--SelectedIndices', '-SI', help='Comma-separated list of indices to select', type=parse_indices, default="0,1,2,3,4,5,6,7,8,9,10,11,12")
 parser.add_argument('--LossWeight', '-LW', help='Weight for the loss function', type=parse_indices, default="1,1,1,1,1,1,1,1,1,1,1,1,1")
+parser.add_argument('--Alpha', '-A', help='Alpha for the reweighted loss function', type=float, default=0.0)
 args = parser.parse_args()
 dataset_name = args.Dataset 
 gpu = args.GPUNumber
@@ -49,7 +50,8 @@ adam_beta2 = args.AdamBeta2
 # selected_indices = [0, 1, 4, 6, 8, 12]
 selected_indices = args.SelectedIndices
 loss_weight = args.LossWeight
-save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_weighted_"+str(weighted)+"_selected_"+','.join(map(str, selected_indices))+"_lossweight_"+','.join(map(str, loss_weight))+"_norw"
+alpha = args.Alpha
+save_name = "BaseTransformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_class"
 
 #CONSTANTS
 DEVICE = torch.device("cuda:"+str(gpu) if torch.cuda.is_available() else "cpu")
@@ -63,8 +65,12 @@ PREDICTION_LENGTH = 32
 
 with open('./NEWDatasets/'+dataset_name+'-train.p', 'rb') as f:
     train_dataset = pickle.load(f)
-    train_dataset = train_dataset[:, :, selected_indices]
+    # train_dataset = train_dataset[:, :, selected_indices]
     print(train_dataset.shape)
+
+# with open('NEWDatasets/FullDataset.p', 'rb') as f:
+#     d = pickle.load(f)
+# N = d['normalizer'].detach().cpu().numpy()[selected_indices]
 
 model = Seq2SeqWithEmbeddingmod(num_encoder_layers=num_encoder_layers,
                              num_decoder_layers=num_decoder_layers,
@@ -88,4 +94,4 @@ else:
     # weights[-9:] = np.arange(1,10,1)
     # print(weights)
     weights = 1/sum(weights)*weights
-    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight)
+    train_model_reweighted2(model, train_dataset, opt, weights, prediction_len=PREDICTION_LENGTH, num_epochs=NUM_EPOCHS, device=DEVICE, checkpoint_suffix=save_name, lw=loss_weight, alpha=alpha)
