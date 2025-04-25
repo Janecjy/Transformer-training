@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from glob import glob
 
-BOUNDARY_DIR = "/datastor1/janec/datasets/boundaries/"
+BOUNDARY_DIR = "/datastor1/anonymous/datasets/boundaries/"
 FEATURES_TO_PLOT = [1, 2, 3, 4, 5]  # Skip feature 0
 
 def load_boundaries(file_path):

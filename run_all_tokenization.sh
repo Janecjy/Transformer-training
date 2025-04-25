@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BOUNDARY_DIR="/datastor1/janec/datasets/boundaries"
+BOUNDARY_DIR="/datastor1/anonymous/datasets/boundaries"
 SCRIPT="bucket_tokenize_mp.py"
 NPROC=8
 MAX_JOBS=4  # how many to run in parallel

@@ -24,9 +24,9 @@ TEST_SETS = [
     "6col_20rtt_pensieve-real_test_combined.p",
     "6col_20rtt_pensieve-synthetic_test_combined.p",
 ]
-TEST_DIR = "/datastor1/janec/datasets/combined"
-BOUNDARY_DIR = "/datastor1/janec/datasets/combined"
-MODEL_DIR = "/datastor1/janec/complete-models"
+TEST_DIR = "/datastor1/anonymous/datasets/combined"
+BOUNDARY_DIR = "/datastor1/anonymous/datasets/combined"
+MODEL_DIR = "/datastor1/anonymous/complete-models"
 
 BOUNDARY_FILES = {
     "quantile30": "boundaries-quantile30-merged-tokenized-multi.pkl",

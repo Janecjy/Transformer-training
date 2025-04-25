@@ -303,15 +303,15 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 
 
 # Test the model
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     regular_vocab_dict = pickle.load(f_vocab)
-with open('/u/janechen/Documents/Transformer-training-fewer-features/NEWDatasets/combined-dataset-preprocessed-3col/3col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training-fewer-features/NEWDatasets/combined-dataset-preprocessed-3col/3col-VocabDict.p', 'rb') as f_vocab:
     few_feature_vocab_dict = pickle.load(f_vocab)
 
 few_feature_model_name = 'Transformer with 3 Features'
-few_feature_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_3col_Transformer3_32_3_3_8_2_lr_1e-05-999iter.p', map_location=DEVICE)
+few_feature_model = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Combined_10RTT_3col_Transformer3_32_3_3_8_2_lr_1e-05-999iter.p', map_location=DEVICE)
 regular_feature_model_name = 'Transformer with 6 Features'
-regular_feature_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
+regular_feature_model = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
 model_list = [few_feature_model, regular_feature_model]
 model_name_list = [few_feature_model_name, regular_feature_model_name]
 is_transformer_list = [True, True]

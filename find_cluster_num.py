@@ -13,8 +13,8 @@ try:
 except ImportError:
     raise RuntimeError("cuML is not available.")
 
-DATASET_DIR = "/datastor1/janec/datasets/raw"
-COMBINED_DIR = "/datastor1/janec/datasets/combined"
+DATASET_DIR = "/datastor1/anonymous/datasets/raw"
+COMBINED_DIR = "/datastor1/anonymous/datasets/combined"
 
 FEATURE_DIM = 6
 

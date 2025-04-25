@@ -138,7 +138,7 @@ def train_mlp(model, dataset, optimizer, prediction_len, device, num_epochs=NUM_
         print(f"[info] epoch {epoch} | Time taken = {epoch_time:.1f} seconds")
         if (epoch+1)%100 == 0:
             print(f"Epoch loss = {epoch_loss:.6f}")
-            torch.save(model, '/datastor1/janec/Models/MLP-MS-Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
+            torch.save(model, '/datastor1/anonymous/Models/MLP-MS-Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
         if epoch == num_epochs-1:
             print(f"Final Epoch: Loss = {epoch_loss:.6f}")
         shuffle_idx = torch.randperm(dataset.shape[0])
@@ -427,4 +427,4 @@ save_name = 'MLP-MS-norm-{}dim-noweighting-vocab'.format(args.hidden_dim)
 opt = torch.optim.Adam(model.parameters(), lr=1e-4)
 trained_model, loss_traj = train_mlp(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, checkpoint_suffix=str(args.hidden_dim), vocab_dict=vocab_dict, checkpoint_path=args.checkpoint_path, resume_from_epoch=args.resume_from_epoch)
 
-torch.save(trained_model, '/datastor1/janec/Models/{}-1000iter.p'.format(save_name))
+torch.save(trained_model, '/datastor1/anonymous/Models/{}-1000iter.p'.format(save_name))

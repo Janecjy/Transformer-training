@@ -396,19 +396,19 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 
 
 # Test the model
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     classification_vocab_dict = pickle.load(f_vocab)
 
 regression_model_name = 'Regression Transformer'
-regression_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Regression_Transformer3_256_10_10_32_4_lr_0.0001-999iter.p', map_location=DEVICE)
+regression_model = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Regression_Transformer3_256_10_10_32_4_lr_0.0001-999iter.p', map_location=DEVICE)
 classification_model_name = 'Classification Transformer'
-classification_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
+classification_model = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
 model_list = [regression_model, classification_model]
 model_name_list = [regression_model_name, classification_model_name]
 is_transformer_list = [True, True]
 with open('NEWDatasets/combined-dataset-preprocessed/6col-rtt-based-test.p', 'rb') as f:
     classification_dataset = pickle.load(f)
-with open('/u/janechen/Documents/Transformer-training-regression/NEWDatasets/combined-dataset-preprocessed-regression/6col-rtt-based-test.p', 'rb') as f:
+with open('/u/anonymous/Documents/Transformer-training-regression/NEWDatasets/combined-dataset-preprocessed-regression/6col-rtt-based-test.p', 'rb') as f:
     regression_dataset = pickle.load(f)
 prediction_len = 10
 test_and_plot_distribution_multi_model(model_list, model_name_list, is_transformer_list, [regression_dataset, classification_dataset], classification_vocab_dict, prediction_len, batch_size=32, iteration=ITER)

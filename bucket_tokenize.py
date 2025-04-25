@@ -9,7 +9,7 @@ import ntpath
 ##########################################
 # Constants and paths
 ##########################################
-COMBINED_DIR = "/datastor1/janec/datasets/combined"
+COMBINED_DIR = "/datastor1/anonymous/datasets/combined"
 TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col-20rtt-train.p")
 FEATURE_DIM = 6
 

@@ -4,7 +4,7 @@ import numpy as np
 from glob import glob
 
 MERGE_THRESHOLD = 0.01
-BOUNDARY_DIR = "/datastor1/janec/datasets/boundaries/"
+BOUNDARY_DIR = "/datastor1/anonymous/datasets/boundaries/"
 
 def merge_boundaries(boundaries, threshold=MERGE_THRESHOLD):
     merged = {}

@@ -21,9 +21,9 @@ except ImportError:
 import matplotlib.pyplot as plt
 from sklearn.metrics import silhouette_score
 
-DATASET_DIR = "/datastor1/janec/datasets"
-COMBINED_DIR = "/datastor1/janec/datasets/combined"
-BOUNDARY_DIR = "/datastor1/janec/datasets/boundaries"
+DATASET_DIR = "/datastor1/anonymous/datasets"
+COMBINED_DIR = "/datastor1/anonymous/datasets/combined"
+BOUNDARY_DIR = "/datastor1/anonymous/datasets/boundaries"
 
 TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col_20rtt_train_combined.p")
 
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     # 4) Compute boundaries
     bucket_boundaries = compute_bucket_boundaries(feature_values, args.method, args.num_buckets)
 
-    # 5) Save boundaries under /datastore1/janec/datasets/boundaries
+    # 5) Save boundaries under /datastore1/anonymous/datasets/boundaries
     # os.makedirs(BOUNDARY_DIR, exist_ok=True)
 
     # e.g. boundaries-quantile1000.pkl or boundaries-kmeans.pkl

@@ -303,15 +303,15 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 
 
 # Test the model
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     rtt_vocab_dict = pickle.load(f_vocab)
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/ccbench-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     time_vocab_dict = pickle.load(f_vocab)
 
 time_model_name = 'Time-based Transformer'
-time_model = torch.load('/datastor1/janec/complete-models/Time-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=DEVICE)
+time_model = torch.load('/datastor1/anonymous/complete-models/Time-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-809iter.p', map_location=DEVICE)
 rtt_model_name = 'RTT-based Transformer'
-rtt_model = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
+rtt_model = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
 model_list = [time_model, rtt_model]
 model_name_list = [time_model_name, rtt_model_name]
 is_transformer_list = [True, True]

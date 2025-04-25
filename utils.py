@@ -507,7 +507,7 @@ def train_model_vocab_single(model, dataset, optimizer, prediction_len, device, 
         if checkpoint_suffix is not None and (epoch + 1) % 10 == 0:
             with open('./Loss_log_' + checkpoint_suffix + '.p', 'wb') as f:
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-            torch.save(model, '/datastor1/janec/models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
+            torch.save(model, '/datastor1/anonymous/models/Checkpoint-' + checkpoint_suffix + '-'+str(epoch)+'iter.p')
 
         # # Shuffle dataset at the end of each epoch
         # shuffle_idx = torch.randperm(dataset.shape[0])
@@ -604,9 +604,9 @@ def train_model_vocab_multi(
 
         # Checkpointing
         if checkpoint_suffix is not None and (epoch+1) % 10 == 0:
-            with open(f'/datastor1/janec/models/Loss_log_{checkpoint_suffix}.p', 'wb') as f:
+            with open(f'/datastor1/anonymous/models/Loss_log_{checkpoint_suffix}.p', 'wb') as f:
                 pickle.dump(loss_traj, f, protocol=pickle.HIGHEST_PROTOCOL)
-            torch.save(model, f'/datastor1/janec/models/Checkpoint-{checkpoint_suffix}-{epoch}iter.p')
+            torch.save(model, f'/datastor1/anonymous/models/Checkpoint-{checkpoint_suffix}-{epoch}iter.p')
 
     print(f"[Multi-Head] Final Epoch Loss: {epoch_loss:.6f}")
     return model, loss_traj

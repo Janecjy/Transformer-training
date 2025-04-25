@@ -36,7 +36,7 @@ def main():
     parser = argparse.ArgumentParser(description="Check feature ranges from combined RTT dataset")
     parser.add_argument(
         "--dataset-path",
-        default="/datastor1/janec/datasets/",
+        default="/datastor1/anonymous/datasets/",
         help="Path to the combined dataset pickle file (shape: (N, 20, 6))"
     )
     args = parser.parse_args()

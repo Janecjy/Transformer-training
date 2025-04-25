@@ -9,7 +9,7 @@ from multiprocessing import Pool, cpu_count
 ##########################################
 # Paths
 ##########################################
-COMBINED_DIR = "/datastor1/janec/datasets/combined"
+COMBINED_DIR = "/datastor1/anonymous/datasets/combined"
 TRAIN_DATA_PATH = os.path.join(COMBINED_DIR, "6col_20rtt_train_combined.p")
 FEATURE_DIM = 6
 

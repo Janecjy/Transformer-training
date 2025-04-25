@@ -840,26 +840,26 @@ def process_and_calculate_distances_multiple_models(bucket_boundaries):
 
 
 # Test the model
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabDict.p', 'rb') as f_vocab:
     vocab_dict = pickle.load(f_vocab)
     
-with open('/u/janechen/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabBackDict.p', 'rb') as f_vocab_back:
+with open('/u/anonymous/Documents/Transformer-training/NEWDatasets/combined-dataset-preprocessed/6col-VocabBackDict.p', 'rb') as f_vocab_back:
     vocab_back_dict = pickle.load(f_vocab_back)
 
 transformer_model_small_name = 'Transformer-16emb'
-transformer_model_small = torch.load('/datastor1/janec/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
+transformer_model_small = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Combined_10RTT_6col_Transformer3_64_5_5_16_4_lr_1e-05-999iter.p', map_location=DEVICE)
 # transformer_model_large_name = 'Transformer-64emb'
-# transformer_model_large = torch.load('/datastor1/janec/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
+# transformer_model_large = torch.load('/datastor1/anonymous/complete-models/Checkpoint-Large_Combined_10RTT_6col_Transformer3_256_8_8_64_8_lr_1e-05-999iter.p', map_location=DEVICE)
 # mlp_model_large_name = 'MLP-102h'
-# mlp_model_large = torch.load('/datastor1/janec/Models/MLP-MS-Checkpoint-102-499iter.p', map_location=DEVICE)
+# mlp_model_large = torch.load('/datastor1/anonymous/Models/MLP-MS-Checkpoint-102-499iter.p', map_location=DEVICE)
 # mlp_model_small_name = 'MLP'
-# mlp_model_small = torch.load('/datastor1/janec/Models/MLP-MS-Checkpoint-34-999iter.p', map_location=DEVICE)
+# mlp_model_small = torch.load('/datastor1/anonymous/Models/MLP-MS-Checkpoint-34-999iter.p', map_location=DEVICE)
 # cnn_model_name = 'CNN'
-# cnn_model = torch.load('/datastor1/janec/Models/CNN-256-epoch1000.pth', map_location=DEVICE)
+# cnn_model = torch.load('/datastor1/anonymous/Models/CNN-256-epoch1000.pth', map_location=DEVICE)
 # lstm_model_name = 'LSTM'
-# lstm_model = torch.load('/datastor1/janec/Models/LSTM-256-epoch1000.pth', map_location=DEVICE)
+# lstm_model = torch.load('/datastor1/anonymous/Models/LSTM-256-epoch1000.pth', map_location=DEVICE)
 # rtt_model_name = 'RTT-Transformer_64_5_5_16_4_lr_1e-05_999iter'
-# rtt_model = torch.load('/datastor1/janec/combined-dataset-model/Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-999iter.p', map_location=DEVICE)
+# rtt_model = torch.load('/datastor1/anonymous/combined-dataset-model/Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-999iter.p', map_location=DEVICE)
 # time_model_name = 'Time-Transformer_64_5_5_16_4_lr_1e-05_'+str(ITER)+'iter'
 # time_model = torch.load('Models/Time-Checkpoint-BaseTransformer3_64_5_5_16_4_lr_1e-05_vocab-'+str(ITER)+'iter.p', map_location=DEVICE)
 # model_list = [rtt_model]#, time_model]

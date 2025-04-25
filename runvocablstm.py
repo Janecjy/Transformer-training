@@ -145,4 +145,4 @@ save_name = 'LSTM-{}dim-noweighting-vocab'.format(args.hidden_dim)
 opt = torch.optim.Adam(model.parameters(), lr=1e-4)
 trained_model, loss_traj = train_lstm(model, train_dataset, opt, PREDICTION_LENGTH, DEVICE, 1000, BATCH_SIZE, checkpoint_suffix=str(args.hidden_dim), vocab_dict=vocab_dict, checkpoint_path=args.checkpoint_path, resume_from_epoch=args.resume_from_epoch)
 
-torch.save(trained_model, '/datastor1/janec/Models/{}-1000iter.p'.format(save_name))
+torch.save(trained_model, '/datastor1/anonymous/Models/{}-1000iter.p'.format(save_name))

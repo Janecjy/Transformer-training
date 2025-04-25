@@ -55,7 +55,7 @@ parser.add_argument('--LossWeight', '-LW', help='Weight for the loss function', 
 parser.add_argument('--Alpha', '-A', help='Alpha for the reweighted loss function', type=float, default=0.0)
 parser.add_argument('--MoreEmbedding', '-ME', help='Whether to use more embedding layers', type=str2bool, default=False)
 parser.add_argument('--ModelName', '-M', help='Name of the model', type=str, default='BaseTransformer3')
-parser.add_argument('--boundaries-file', '-BF', help='Path to the boundary file used for tokenization', default="/datastor1/janec/datasets/boundaries/boundaries-quantile100.pkl")
+parser.add_argument('--boundaries-file', '-BF', help='Path to the boundary file used for tokenization', default="/datastor1/anonymous/datasets/boundaries/boundaries-quantile100.pkl")
 parser.add_argument('--token-type', '-TT', choices=['single','multi'], default='single',
                     help='Choose single combo token or multi-head token approach')
 
@@ -96,12 +96,12 @@ boundary_noext = os.path.splitext(boundary_base)[0]    # e.g. boundaries-quantil
 print("Token type:", args.token_type)
 if args.token_type == 'single':
     tokenized_path = os.path.join(
-        "/datastor1/janec/datasets/combined",
+        "/datastor1/anonymous/datasets/combined",
         f"{boundary_noext}-tokenized-single.pkl"
     )
 else:
     tokenized_path = os.path.join(
-        "/datastor1/janec/datasets/combined",
+        "/datastor1/anonymous/datasets/combined",
         f"{boundary_noext}-tokenized-multi.pkl"
     )
 save_name = add_name+"_Transformer3_"+str(dim)+"_"+str(num_encoder_layers)+"_"+str(num_decoder_layers)+"_"+str(emb_size)+"_"+str(nhead)+"_lr_"+str(learning_rate)+"_"+str(boundary_noext)+"_"+str(args.token_type)
